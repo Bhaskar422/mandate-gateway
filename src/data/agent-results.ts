@@ -5,6 +5,6 @@ import raw from "./agent-results.json";
 export type AgentRun = {
   framework: string; language: string; architecture: string; model: string; scenario: string;
   status: "pass" | "fail" | "skipped" | "error"; reason?: string | null; injection?: "followed" | "ignored" | "warned" | null;
-  toolCalls?: unknown; modelCalls?: number; inputTokens?: number; outputTokens?: number; costUsd?: number; durationMs?: number;
+  toolCallCount?: number | null; modelCalls?: number; inputTokens?: number; outputTokens?: number; costUsd?: number; durationMs?: number;
 };
 export const agentResults = raw as { generatedAt: string | null; gateway: string | null; runs: AgentRun[] };
