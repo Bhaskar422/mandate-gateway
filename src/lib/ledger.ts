@@ -9,7 +9,7 @@ export type LedgerType =
   | "purchase.approved_by_user" | "purchase.declined_by_user" | "payment.captured" | "payment.failed"
   | "problem.reported" | "refund.requested" | "refund.completed" | "merchant.declined" | "dispute.opened" | "dispute.evidence_submitted" | "webhook.received"
   | "settlement.offer" | "settlement.counter" | "settlement.accepted" | "settlement.declined"
-  | "agent.paused" | "agent.resumed" | "agent.revoked" | "account.frozen" | "account.unfrozen" | "merchant.registered" | "merchant.verified";
+  | "agent.paused" | "agent.resumed" | "agent.revoked" | "agent.key_rotated" | "account.frozen" | "account.unfrozen" | "merchant.registered" | "merchant.verified";
 
 function keys() {
   const pem = process.env.LEDGER_SIGNING_KEY ? Buffer.from(process.env.LEDGER_SIGNING_KEY, "base64").toString("utf8") : null;
@@ -45,6 +45,19 @@ export async function append(e: { userId: string; purchaseId?: string | null; ty
 }
 
 export type LedgerRow = typeof schema.ledger.$inferSelect;
+
+/** Sign any JSON value with the gateway's key, e.g. a credential an agent presents to a merchant. */
+export function signPayload<T extends Record<string, unknown>>(payload: T) {
+  return { payload, signature: sign(null, Buffer.from(canonical(payload)), keys().priv).toString("base64"), algorithm: "ed25519 over canonical JSON" as const };
+}
+export function verifyPayload(signed: { payload?: unknown; signature?: unknown }) {
+  try { return typeof signed.signature === "string" && verify(null, Buffer.from(canonical(signed.payload)), keys().pub, Buffer.from(signed.signature, "base64")); } catch { return false; }
+}
+/** The current head of the chain. Publishing it lets anyone later prove the ledger was not rewritten. */
+export async function ledgerHead() {
+  const [last] = await db.select({ seq: schema.ledger.seq, hash: schema.ledger.hash, at: schema.ledger.at }).from(schema.ledger).orderBy(desc(schema.ledger.seq)).limit(1);
+  return signPayload({ entries: last?.seq ?? 0, head: last?.hash ?? GENESIS, headAt: last?.at ?? null, observedAt: new Date().toISOString() });
+}
 
 /** Recompute every hash and signature. Any edited, removed or reordered row breaks the chain. */
 export function verifyRows(rows: LedgerRow[], pubPem: string, startPrev = GENESIS) {

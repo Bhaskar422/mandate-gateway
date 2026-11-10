@@ -79,7 +79,7 @@ export async function dashboardState(userId: string) {
 
   return {
     appUrl: appUrl(), simulated: paypalSimulated(), llm: llmConfigured(),
-    account: { frozen: !!user?.frozenAt, frozenAt: iso(user?.frozenAt), settings: { autoAcceptRefundPercent: user?.settings?.autoAcceptRefundPercent ?? 100, autoAcceptReplacement: !!user?.settings?.autoAcceptReplacement } },
+    account: { frozen: !!user?.frozenAt, frozenAt: iso(user?.frozenAt), settings: { autoAcceptRefundPercent: user?.settings?.autoAcceptRefundPercent ?? 100, autoAcceptReplacement: !!user?.settings?.autoAcceptReplacement, notifyUrl: user?.settings?.notifyUrl ?? null } },
     paypal: link?.status === "active" ? { email: link.payerEmail } : null,
     mandates,
     /** The newest active mandate, for components that show one. */

@@ -2,7 +2,7 @@
 // Every mutation the web app can make. Each one resolves the signed-in user itself; none trusts a user id from the client.
 import { revalidatePath } from "next/cache";
 import type { UserSettings } from "@/lib/db/schema";
-import { answerOffer, confirmMandate, createAgent, decideApproval, decideByToken, pauseAgent, reportProblem, resolveMerchantNames, resumeAgent, revokeAgent, revokeMandate, setFrozen, updateSettings } from "@/lib/gateway";
+import { answerOffer, confirmMandate, createAgent, decideApproval, decideByToken, pauseAgent, reportProblem, resolveMerchantNames, resumeAgent, revokeAgent, revokeMandate, rotateAgentKey, setFrozen, updateSettings } from "@/lib/gateway";
 import { publicKeyPem, verifyBundle, type LedgerRow } from "@/lib/ledger";
 import { compileMandate } from "@/lib/llm";
 import { registerMerchant, verifyMerchantDomain } from "@/lib/merchants";
@@ -52,6 +52,10 @@ export async function createAgentAction(name: string): Promise<R<{ key: string }
 export async function pauseAgentAction(agentId: string): Promise<R> { try { await pauseAgent(await currentUserId(), agentId); return done(); } catch (e) { return fail(e); } }
 export async function resumeAgentAction(agentId: string): Promise<R> { try { await resumeAgent(await currentUserId(), agentId); return done(); } catch (e) { return fail(e); } }
 export async function revokeAgentAction(agentId: string): Promise<R> { try { await revokeAgent(await currentUserId(), agentId); return done(); } catch (e) { return fail(e); } }
+/** Replace an agent's key. The old key stops working at once; the new one is shown once. */
+export async function rotateAgentKeyAction(agentId: string): Promise<R<{ key: string }>> {
+  try { const key = await rotateAgentKey(await currentUserId(), agentId); revalidatePath("/", "layout"); return { ok: true, key }; } catch (e) { return fail(e); }
+}
 /** The kill switch. */
 export async function setFrozenAction(frozen: boolean): Promise<R> { try { await setFrozen(await currentUserId(), frozen); return done(); } catch (e) { return fail(e); } }
 export async function updateSettingsAction(patch: UserSettings): Promise<R> { try { await updateSettings(await currentUserId(), patch); return done(); } catch (e) { return fail(e); } }
