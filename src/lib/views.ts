@@ -18,7 +18,7 @@ export async function dashboardState(userId: string) {
     db.select().from(schema.merchants),
     db.select().from(schema.purchases).where(eq(schema.purchases.userId, userId)).orderBy(desc(schema.purchases.createdAt)).limit(200),
     db.select().from(schema.cases).where(eq(schema.cases.userId, userId)).orderBy(desc(schema.cases.createdAt)),
-    listMerchants(),
+    listMerchants(userId),
   ]);
   const agentName = (id: string | null) => agentRows.find((a) => a.id === id)?.name ?? null;
   const merchantName = (id: string | null) => merchantRows.find((m) => m.id === id)?.name ?? null;

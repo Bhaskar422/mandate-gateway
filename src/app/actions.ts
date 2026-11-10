@@ -106,5 +106,5 @@ export async function verifyEvidenceAction(json: string): Promise<R<{ purchaseId
 
 export async function shipOrderAction(slug: string, orderId: string, sku: string) { await shipOrder(slug, orderId, sku); revalidatePath(`/stores/${slug}/admin`); }
 export async function syncDisputesAction(slug: string) { const r = await syncDisputes(slug); revalidatePath(`/stores/${slug}/admin`); return r; }
-export async function sandboxRulingAction(slug: string, orderId: string) { await sandboxRuling(slug, orderId); revalidatePath(`/stores/${slug}/admin`); }
+export async function sandboxRulingAction(slug: string, orderId: string) { const r = await sandboxRuling(slug, orderId); revalidatePath(`/stores/${slug}/admin`); return r; }
 export async function publishTokenAction(slug: string, token: string) { await publishVerificationToken(slug, token); revalidatePath(`/stores/${slug}/admin`); }

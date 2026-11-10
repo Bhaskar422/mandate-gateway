@@ -31,14 +31,15 @@
   "include": [
     "**/*.ts",
     "**/*.tsx",
-    ".next-build/types/**/*.ts",
     ".next/types/**/*.ts",
     "next-env.d.ts",
-    ".next-agent-tests/types/**/*.ts"
+    ".next-build/types/**/*.ts"
   ],
   "exclude": [
     "node_modules",
     "agent-tests",
-    ".claude"
+    ".claude",
+    ".next-build",
+    ".next-agent-tests"
   ]
 }

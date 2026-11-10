@@ -22,12 +22,14 @@ export function scanPage(html: string, extraText = ""): PageSignal[] {
   const out: PageSignal[] = [];
   const body = html.replace(/<(script|style|noscript)[\s\S]*?<\/\1>/gi, " ");
 
-  // Text inside elements styled or marked so a shopper cannot see it.
-  for (const m of body.matchAll(/<([a-z0-9]+)\b([^>]*)>([\s\S]*?)<\/\1>/gi)) {
+  // Text inside elements styled or marked so a shopper cannot see it. Each opening tag is tested on its own,
+  // so an outer element (such as <html>) cannot swallow the ones inside it.
+  for (const m of body.matchAll(/<([a-z][a-z0-9]*)\b([^>]*)>/gi)) {
     const attrs = m[2];
-    const hidden = HIDING.test(attrs) || /\bhidden(?:\s|=|$)/i.test(attrs) || /aria-hidden\s*=\s*["']?true/i.test(attrs);
-    const text = strip(m[3]);
-    if (hidden && text.length >= 40) { out.push({ kind: "hidden_text", detail: "text hidden from shoppers", excerpt: text.slice(0, 240) }); break; }
+    if (!(HIDING.test(attrs) || /(?:^|\s)hidden(?:\s|=|$)/i.test(attrs) || /aria-hidden\s*=\s*["']?true/i.test(attrs))) continue;
+    const from = m.index + m[0].length, close = body.toLowerCase().indexOf(`</${m[1].toLowerCase()}`, from);
+    const text = strip(body.slice(from, close === -1 ? from + 2000 : close));
+    if (text.length >= 40) { out.push({ kind: "hidden_text", detail: "text hidden from shoppers", excerpt: text.slice(0, 240) }); break; }
   }
 
   const visible = `${strip(body)} ${extraText}`;

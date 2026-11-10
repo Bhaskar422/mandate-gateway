@@ -61,14 +61,15 @@ export async function verifyMerchantDomain(userId: string, merchantId: string) {
   return row;
 }
 
-export async function listMerchants() {
+/** The registry. A pending store's verification token is shown only to the user who registered it. */
+export async function listMerchants(userId?: string) {
   await ensureSeed();
   const rows = await db.select().from(merchants).orderBy(desc(merchants.verified), merchants.name);
   return rows.map((m) => ({
     id: m.id, name: m.name, baseUrl: m.baseUrl, source: m.source,
     trust: m.verified ? ("verified" as const) : m.source === "builtin" || m.domainVerifiedAt ? ("registered" as const) : ("pending" as const),
     payable: (m.source === "builtin" || !!m.domainVerifiedAt) && !!(m.paypalMerchantId || m.paypalEmail),
-    verificationToken: m.domainVerifiedAt ? null : m.verificationToken, wellKnownUrl: m.source === "onboarded" ? `${m.baseUrl}${WELL_KNOWN}` : null,
+    verificationToken: m.domainVerifiedAt || !userId || m.registeredBy !== userId ? null : m.verificationToken, registeredByMe: !!userId && m.registeredBy === userId, wellKnownUrl: m.source === "onboarded" ? `${m.baseUrl}${WELL_KNOWN}` : null,
     domainVerifiedAt: m.domainVerifiedAt?.toISOString() ?? null,
   }));
 }
