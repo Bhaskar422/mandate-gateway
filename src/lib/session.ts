@@ -1,0 +1,11 @@
+import { cookies } from "next/headers";
+import { db, schema } from "./db";
+
+export const SESSION_COOKIE = "mandate_uid";
+/** The cookie is an unguessable id set by middleware. The user row is created on first use. */
+export async function currentUserId(): Promise<string> {
+  const id = (await cookies()).get(SESSION_COOKIE)?.value;
+  if (!id || !/^usr_[A-Za-z0-9_-]{20,}$/.test(id)) throw new Error("No session");
+  await db.insert(schema.users).values({ id }).onConflictDoNothing();
+  return id;
+}

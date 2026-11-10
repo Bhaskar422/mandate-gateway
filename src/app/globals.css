@@ -1,26 +1,11 @@
 @import "tailwindcss";
-
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
-}
+:root { color-scheme: light; }
+body { background: #f6f7f9; color: #0f172a; font-family: var(--font-geist-sans), system-ui, sans-serif; }
+.card { background: #fff; border: 1px solid #e2e8f0; border-radius: 14px; }
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: .4rem; border-radius: 9px; padding: .5rem .9rem; font-size: .875rem; font-weight: 600; transition: opacity .15s; cursor: pointer; }
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+.btn-primary { background: #0f172a; color: #fff; } .btn-primary:hover { opacity: .88; }
+.btn-ghost { border: 1px solid #cbd5e1; background: #fff; } .btn-ghost:hover { background: #f1f5f9; }
+.btn-danger { border: 1px solid #fecaca; color: #b91c1c; background: #fff; } .btn-danger:hover { background: #fef2f2; }
+.label { font-size: .7rem; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: #64748b; }
+.mono { font-family: var(--font-geist-mono), ui-monospace, monospace; }

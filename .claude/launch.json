@@ -1,0 +1,6 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    { "name": "mandate", "runtimeExecutable": "/bin/zsh", "runtimeArgs": ["-c", "PATH=$HOME/.nvm/versions/node/v22.23.4/bin:$PATH env -u ANTHROPIC_BASE_URL pnpm dev"], "port": 3000 }
+  ]
+}
