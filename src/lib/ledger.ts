@@ -7,7 +7,9 @@ export const GENESIS = "0".repeat(64);
 export type LedgerType =
   | "mandate.confirmed" | "mandate.revoked" | "paypal.linked" | "purchase.requested" | "purchase.decided"
   | "purchase.approved_by_user" | "purchase.declined_by_user" | "payment.captured" | "payment.failed"
-  | "problem.reported" | "refund.requested" | "refund.completed" | "merchant.declined" | "dispute.opened" | "dispute.evidence_submitted" | "webhook.received";
+  | "problem.reported" | "refund.requested" | "refund.completed" | "merchant.declined" | "dispute.opened" | "dispute.evidence_submitted" | "webhook.received"
+  | "settlement.offer" | "settlement.counter" | "settlement.accepted" | "settlement.declined"
+  | "agent.paused" | "agent.resumed" | "agent.revoked" | "account.frozen" | "account.unfrozen" | "merchant.registered" | "merchant.verified";
 
 function keys() {
   const pem = process.env.LEDGER_SIGNING_KEY ? Buffer.from(process.env.LEDGER_SIGNING_KEY, "base64").toString("utf8") : null;

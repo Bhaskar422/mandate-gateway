@@ -3,6 +3,7 @@
 import { and, eq } from "drizzle-orm";
 import { appUrl, gatewayCreds, paypalBase, storeCreds } from "../config";
 import { db, schema } from "../db";
+import type { SettlementOffer } from "../db/schema";
 import { newId } from "../ids";
 import { publicKeyPem, verifyBundle, type LedgerRow } from "../ledger";
 import { acceptClaim, adjudicate, getDispute, listDisputes, provideEvidence, refundCapture, sendDisputeMessage, type Dispute } from "../paypal";
@@ -26,14 +27,21 @@ export async function recordOrder(slug: string, entry: LedgerRow) {
   return o;
 }
 
+/** The store owner pastes the gateway's verification token into the store's site settings. */
+export async function publishVerificationToken(slug: string, token: string) {
+  const t = token.trim().slice(0, 200) || null;
+  await db.insert(schema.storeSettings).values({ slug, verificationToken: t }).onConflictDoUpdate({ target: schema.storeSettings.slug, set: { verificationToken: t, updatedAt: new Date() } });
+}
+
 export async function shipOrder(slug: string, orderId: string, shippedSku: string) {
   const [o] = await db.update(storeOrders).set({ status: "shipped", shippedSku, tracking: `STR${Date.now().toString(36).toUpperCase()}` }).where(and(eq(storeOrders.id, orderId), eq(storeOrders.storeSlug, slug), eq(storeOrders.status, "paid"))).returning();
   return o ?? null;
 }
 
 type Claim = { issue: string; summary: string };
+type Order = typeof storeOrders.$inferSelect;
 /** Does the store's own fulfilment record back the buyer's claim? */
-function assess(o: typeof storeOrders.$inferSelect, issue: string) {
+function assess(o: Order, issue: string) {
   if (o.status === "refunded") return { agree: false, reason: "This order has already been refunded." };
   if (o.status === "paid") return ["not_received", "unauthorised", "changed_mind", "other", "wrong_item"].includes(issue)
     ? { agree: true, reason: "The order has not shipped, so it can be cancelled and refunded." } : { agree: false, reason: "The order has not shipped yet." };
@@ -42,19 +50,77 @@ function assess(o: typeof storeOrders.$inferSelect, issue: string) {
   return { agree: false, reason: `Our fulfilment record shows the ordered item (${o.sku}) was shipped.` };
 }
 
-/** The merchant's returns agent: verify the evidence, check it against our own records, refund if they agree. */
-export async function handleReturn(slug: string, body: { purchaseId: string; claim: Claim; evidence: { publicKey: string; entries: LedgerRow[] } }) {
-  const v = verifyBundle(body.evidence, pinnedGatewayKey());
-  if (!v.ok) return { decision: "declined" as const, reason: `The evidence record failed verification (${v.why})` };
-  const captured = body.evidence.entries.find((e) => e.type === "payment.captured" && e.purchaseId === body.purchaseId);
+/** This store's returns policy for claims its own records can neither confirm nor refute. */
+export const RETURNS_POLICY = { goodwillOpenPercent: 30, goodwillMaxPercent: 50, restockingFeePercent: 15 };
+type Ask = { type: "full_refund" | "partial_refund" | "replacement"; amountCents?: number };
+
+function offerFor(o: Order, issue: string, ask: Ask): SettlementOffer | null {
+  const id = newId("off");
+  const pct = (n: number) => Math.round((o.amountCents * n) / 100);
+  if (issue === "changed_mind")
+    return { id, type: "partial_refund", amountCents: pct(100 - RETURNS_POLICY.restockingFeePercent), reason: `Returns for a change of mind carry a ${RETURNS_POLICY.restockingFeePercent}% restocking fee.` };
+  if (issue === "damaged" && ask.type !== "partial_refund")
+    return { id, type: "replacement", sku: o.sku, reason: "We can't confirm damage from our records, but we will send a replacement at no cost." };
+  // "Wrong item" lands here only when our record says the right item shipped, so it is treated like "not as described".
+  if (issue === "damaged" || issue === "not_as_described" || issue === "wrong_item") {
+    const max = pct(RETURNS_POLICY.goodwillMaxPercent), open = pct(RETURNS_POLICY.goodwillOpenPercent);
+    if (ask.type === "partial_refund" && ask.amountCents) {
+      return ask.amountCents <= max
+        ? { id, type: "partial_refund", amountCents: ask.amountCents, reason: "Agreed: you keep the item and we refund this amount." }
+        : { id, type: "partial_refund", amountCents: max, reason: `Our records show the ordered item was shipped, so ${RETURNS_POLICY.goodwillMaxPercent}% is the most we can refund without a return.` };
+    }
+    return { id, type: "partial_refund", amountCents: open, reason: `Our records show the ordered item was shipped. As goodwill we can refund ${RETURNS_POLICY.goodwillOpenPercent}% and you keep the item.` };
+  }
+  return null;
+}
+
+async function matchOrder(slug: string, body: { purchaseId: string; evidence?: { publicKey: string; entries: LedgerRow[] } }) {
+  if (body.evidence) {
+    const v = verifyBundle(body.evidence, pinnedGatewayKey());
+    if (!v.ok) return { error: `The evidence record failed verification (${v.why})` };
+  }
   const [o] = await db.select().from(storeOrders).where(and(eq(storeOrders.gatewayPurchaseId, body.purchaseId), eq(storeOrders.storeSlug, slug)));
-  if (!o || !captured || (captured.payload as { paypalCaptureId?: string }).paypalCaptureId !== o.paypalCaptureId)
-    return { decision: "declined" as const, reason: "We have no order matching that evidence record" };
+  const captured = body.evidence?.entries.find((e) => e.type === "payment.captured" && e.purchaseId === body.purchaseId);
+  if (!o || (body.evidence && (!captured || (captured.payload as { paypalCaptureId?: string }).paypalCaptureId !== o.paypalCaptureId)))
+    return { error: "We have no order matching that evidence record" };
+  return { order: o };
+}
+
+/**
+ * The merchant's returns agent. It verifies the gateway's signed record, checks the claim against the store's own
+ * fulfilment record, and then refunds in full, makes an offer under the store's returns policy, or declines.
+ */
+export async function handleReturn(slug: string, body: { purchaseId: string; claim: Claim; ask?: Ask; evidence: { publicKey: string; entries: LedgerRow[] } }) {
+  const found = await matchOrder(slug, body);
+  if (!found.order) return { decision: "declined" as const, reason: found.error };
+  const o = found.order;
   const a = assess(o, body.claim.issue);
-  if (!a.agree) { await db.update(storeOrders).set({ note: `Refund declined: ${a.reason}` }).where(eq(storeOrders.id, o.id)); return { decision: "declined" as const, reason: a.reason }; }
-  const refund = await refundCapture(creds(slug), o.paypalCaptureId!, { note: `Refund for ${getProduct(slug, o.sku)?.name ?? o.sku}: ${a.reason}`, requestId: `refund-${o.id}` });
-  await db.update(storeOrders).set({ status: "refunded", paypalRefundId: refund.id, note: a.reason, evidence: body.evidence as unknown as Record<string, unknown> }).where(eq(storeOrders.id, o.id));
-  return { decision: "refunded" as const, refundId: refund.id, reason: a.reason };
+  if (a.agree) {
+    const refund = await refundCapture(creds(slug), o.paypalCaptureId!, { note: `Refund for ${getProduct(slug, o.sku)?.name ?? o.sku}: ${a.reason}`, requestId: `refund-${o.id}` });
+    await db.update(storeOrders).set({ status: "refunded", paypalRefundId: refund.id, note: a.reason, offer: null, evidence: body.evidence as unknown as Record<string, unknown> }).where(eq(storeOrders.id, o.id));
+    return { decision: "refunded" as const, refundId: refund.id, amountCents: o.amountCents, reason: a.reason };
+  }
+  const offer = o.status === "refunded" ? null : offerFor(o, body.claim.issue, body.ask ?? { type: "full_refund" });
+  if (!offer) { await db.update(storeOrders).set({ note: `Refund declined: ${a.reason}` }).where(eq(storeOrders.id, o.id)); return { decision: "declined" as const, reason: a.reason }; }
+  await db.update(storeOrders).set({ offer, note: `Offer made: ${offer.reason}` }).where(eq(storeOrders.id, o.id));
+  return { decision: "offer" as const, offer };
+}
+
+/** The buyer accepted the offer this store is holding open. Carry it out. */
+export async function acceptOffer(slug: string, body: { purchaseId: string; offerId: string }) {
+  const found = await matchOrder(slug, body);
+  if (!found.order) return { decision: "declined" as const, reason: found.error };
+  const o = found.order, offer = o.offer;
+  if (!offer || offer.id !== body.offerId) return { decision: "declined" as const, reason: "That offer is no longer open" };
+  if (offer.type === "replacement") {
+    const tracking = `STR${Date.now().toString(36).toUpperCase()}`;
+    await db.update(storeOrders).set({ offer: null, replacementSku: offer.sku ?? o.sku, tracking, note: "Replacement shipped at no cost" }).where(eq(storeOrders.id, o.id));
+    return { decision: "replacement" as const, sku: offer.sku ?? o.sku, tracking, reason: offer.reason };
+  }
+  const cents = offer.type === "full_refund" ? o.amountCents : offer.amountCents ?? 0;
+  const refund = await refundCapture(creds(slug), o.paypalCaptureId!, { amountCents: cents, note: `Agreed settlement: ${offer.reason}`.slice(0, 250), requestId: `refund-${o.id}-${offer.id}` });
+  await db.update(storeOrders).set({ offer: null, paypalRefundId: refund.id, status: cents >= o.amountCents ? "refunded" : o.status, note: `Settled: refunded ${(cents / 100).toFixed(2)} of ${(o.amountCents / 100).toFixed(2)}` }).where(eq(storeOrders.id, o.id));
+  return { decision: "refunded" as const, refundId: refund.id, amountCents: cents, reason: offer.reason };
 }
 
 type Bundle = { publicKey: string; entries: LedgerRow[] };

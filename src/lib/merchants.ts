@@ -1,0 +1,74 @@
+// Merchant onboarding. Any store can register by URL; the gateway will only pay it once it has proved
+// control of that URL by publishing a token the gateway issued.
+import { desc, eq } from "drizzle-orm";
+import { appUrl } from "./config";
+import { db, schema } from "./db";
+import { ensureSeed } from "./gateway";
+import { newId } from "./ids";
+import { append } from "./ledger";
+
+const { merchants } = schema;
+export const WELL_KNOWN = "/.well-known/mandate-merchant.json";
+
+const PRIVATE = /^(localhost|127\.|10\.|192\.168\.|169\.254\.|172\.(1[6-9]|2\d|3[01])\.|0\.|\[?::1\]?|\[?f[cd][0-9a-f]{2}:)/i;
+/** Normalise a store URL and refuse ones the gateway must not fetch. */
+export function normaliseStoreUrl(raw: string) {
+  let u: URL;
+  try { u = new URL(/^https?:\/\//i.test(raw.trim()) ? raw.trim() : `https://${raw.trim()}`); } catch { throw new Error("That is not a valid URL"); }
+  const own = new URL(appUrl());
+  const sameAsGateway = u.host === own.host;
+  if (!sameAsGateway) {
+    if (u.protocol !== "https:") throw new Error("A store must be served over https");
+    if (PRIVATE.test(u.hostname) || !u.hostname.includes(".")) throw new Error("That address is not reachable from the public internet");
+  }
+  if (u.username || u.password) throw new Error("The URL must not contain credentials");
+  return `${u.protocol}//${u.host}${u.pathname.replace(/\/+$/, "")}`;
+}
+
+/** Step 1: record the store and issue the token it has to publish. */
+export async function registerMerchant(userId: string, rawUrl: string) {
+  await ensureSeed();
+  const baseUrl = normaliseStoreUrl(rawUrl);
+  const [existing] = await db.select().from(merchants).where(eq(merchants.baseUrl, baseUrl));
+  if (existing) return existing;
+  const [m] = await db.insert(merchants).values({ id: newId("mer"), name: new URL(baseUrl).hostname, baseUrl, verified: false, source: "onboarded",
+    verificationToken: `mandate-verify-${newId("t").slice(2)}${newId("t").slice(2)}`, registeredBy: userId }).returning();
+  await append({ userId, type: "merchant.registered", payload: { merchantId: m.id, baseUrl } });
+  return m;
+}
+
+type WellKnown = { mandate_verification?: string; name?: string; paypal?: { merchant_id?: string; email?: string }; orders_url?: string; returns_url?: string };
+
+/** Step 2: fetch the store's well-known file and check the token. Only then does it become payable. */
+export async function verifyMerchantDomain(userId: string, merchantId: string) {
+  const [m] = await db.select().from(merchants).where(eq(merchants.id, merchantId));
+  if (!m || m.source !== "onboarded") throw new Error("Merchant not found");
+  const url = `${normaliseStoreUrl(m.baseUrl)}${WELL_KNOWN}`;
+  let file: WellKnown;
+  try {
+    const res = await fetch(url, { redirect: "error", signal: AbortSignal.timeout(10_000), cache: "no-store", headers: { Accept: "application/json", "User-Agent": "MandateGateway/1.0" } });
+    if (!res.ok) throw new Error(`the store returned ${res.status}`);
+    file = JSON.parse((await res.text()).slice(0, 20_000));
+  } catch (e) { throw new Error(`Could not read ${url}: ${e instanceof Error ? e.message : e}`); }
+  if (!m.verificationToken || file.mandate_verification !== m.verificationToken) throw new Error(`${url} does not contain this store's verification token yet`);
+  const payee = { paypalMerchantId: file.paypal?.merchant_id?.slice(0, 40) || null, paypalEmail: file.paypal?.email?.slice(0, 120) || null };
+  if (!payee.paypalMerchantId && !payee.paypalEmail) throw new Error("The file must name the store's PayPal account under paypal.merchant_id or paypal.email");
+  // Callback URLs must live under the store's own verified base URL.
+  const under = (v: string | undefined) => (typeof v === "string" && (v === m.baseUrl || v.startsWith(`${m.baseUrl}/`)) ? v : null);
+  const [row] = await db.update(merchants).set({ ...payee, name: (file.name ?? m.name).slice(0, 80), ordersUrl: under(file.orders_url), returnsUrl: under(file.returns_url), domainVerifiedAt: new Date() })
+    .where(eq(merchants.id, m.id)).returning();
+  await append({ userId, type: "merchant.verified", payload: { merchantId: m.id, baseUrl: m.baseUrl, name: row.name, payee } });
+  return row;
+}
+
+export async function listMerchants() {
+  await ensureSeed();
+  const rows = await db.select().from(merchants).orderBy(desc(merchants.verified), merchants.name);
+  return rows.map((m) => ({
+    id: m.id, name: m.name, baseUrl: m.baseUrl, source: m.source,
+    trust: m.verified ? ("verified" as const) : m.source === "builtin" || m.domainVerifiedAt ? ("registered" as const) : ("pending" as const),
+    payable: (m.source === "builtin" || !!m.domainVerifiedAt) && !!(m.paypalMerchantId || m.paypalEmail),
+    verificationToken: m.domainVerifiedAt ? null : m.verificationToken, wellKnownUrl: m.source === "onboarded" ? `${m.baseUrl}${WELL_KNOWN}` : null,
+    domainVerifiedAt: m.domainVerifiedAt?.toISOString() ?? null,
+  }));
+}

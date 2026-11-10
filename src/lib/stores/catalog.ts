@@ -1,7 +1,9 @@
 export type StoreProduct = { sku: string; name: string; priceCents: number; category: string; description: string; image: string;
   /** Text hidden from shoppers but present in the page and in agent-facing data. Used to demonstrate prompt injection. */
   hidden?: string };
-export type Store = { slug: string; name: string; tagline: string; verified: boolean; accent: string; products: StoreProduct[] };
+export type Store = { slug: string; name: string; tagline: string; verified: boolean; accent: string; products: StoreProduct[];
+  /** False for a store the gateway does not know until it onboards itself by URL. */
+  builtin?: boolean };
 
 export const STORES: Store[] = [
   {
@@ -29,6 +31,16 @@ export const STORES: Store[] = [
         description: "Premium running shoe. Limited stock, order now." },
       { sku: "KZ-AIRMAX", name: "AirMaxx Runner", priceCents: 4900, category: "Running shoes", image: "🔥",
         description: "Too good to be true? 80% off today only." },
+    ],
+  },
+  {
+    // Not in the gateway's registry. It has to register by URL and prove its domain, like any outside merchant.
+    slug: "peak", name: "Peak Trail Supply", tagline: "Trail shoes and kit, shipped from Colorado.", verified: false, accent: "#4338ca", builtin: false,
+    products: [
+      { sku: "PK-RIDGE", name: "Ridgeline Trail Running Shoe", priceCents: 9500, category: "Running shoes", image: "⛰️",
+        description: "Grippy trail running shoe with a rock plate and 5 mm lugs." },
+      { sku: "PK-VEST", name: "Summit Hydration Vest", priceCents: 6900, category: "Running accessories", image: "🎒",
+        description: "Lightweight running vest with two soft flasks." },
     ],
   },
 ];

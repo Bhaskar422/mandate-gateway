@@ -33,6 +33,7 @@ export async function compileMandate(text: string, now = new Date()): Promise<Ma
 - "Ask me above $X" sets approvalThresholdCents. "Ask me every time" sets it to 0.
 - If no spending limit is given, set totalLimitCents to the approval threshold if there is one, otherwise 5000.
 - If no end date is given, expire 7 days from now.
+- "At most $X a day" sets dailyLimitCents. "No more than $X at any one store" sets perMerchantLimitCents. "Never buy from X" goes in blockedMerchants. Leave each null or empty when the person did not say it.
 - allowedCategories are short product categories in the person's own words.
 The current time is ${now.toISOString()}.`,
     `The mandate, written by the account owner:\n\n${text}`, "medium");

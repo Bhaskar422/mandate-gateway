@@ -43,3 +43,6 @@ next-env.d.ts
 .pgdata
 !.env.example
 .next-build
+
+# parallel agent worktrees
+.claude/worktrees/

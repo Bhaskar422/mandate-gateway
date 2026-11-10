@@ -5,8 +5,18 @@ import type { ProductSnapshot } from "../product";
 
 const ts = (name: string) => timestamp(name, { withTimezone: true, mode: "date" });
 
+export type UserSettings = {
+  /** Accept a merchant's partial-refund offer automatically when it is at least this share of the price (0-100). 100 means always ask. */
+  autoAcceptRefundPercent?: number;
+  /** Accept a replacement offer automatically. */
+  autoAcceptReplacement?: boolean;
+};
+
 export const users = pgTable("users", {
   id: text("id").primaryKey(),
+  /** The kill switch: while set, every agent purchase is blocked. */
+  frozenAt: ts("frozen_at"),
+  settings: jsonb("settings").$type<UserSettings>().notNull().default({}),
   createdAt: ts("created_at").notNull().defaultNow(),
 });
 
@@ -24,6 +34,9 @@ export const paypalLinks = pgTable("paypal_links", {
 export const mandates = pgTable("mandates", {
   id: text("id").primaryKey(),
   userId: text("user_id").notNull().references(() => users.id),
+  name: text("name"),
+  /** Agents this mandate applies to. Null means every agent of the user. */
+  agentIds: jsonb("agent_ids").$type<string[] | null>(),
   sourceText: text("source_text").notNull(),
   rules: jsonb("rules").$type<MandateRules>().notNull(),
   rulesHash: text("rules_hash").notNull(),
@@ -40,6 +53,9 @@ export const agents = pgTable("agents", {
   keyPrefix: text("key_prefix").notNull(),
   createdAt: ts("created_at").notNull().defaultNow(),
   revokedAt: ts("revoked_at"),
+  pausedAt: ts("paused_at"),
+  pauseReason: text("pause_reason"),
+  lastSeenAt: ts("last_seen_at"),
 });
 
 /** Merchant registry. The payee always comes from here, never from the agent. */
@@ -50,12 +66,20 @@ export const merchants = pgTable("merchants", {
   paypalMerchantId: text("paypal_merchant_id"),
   paypalEmail: text("paypal_email"),
   verified: boolean("verified").notNull().default(false),
+  /** "builtin" merchants ship with the gateway; "onboarded" ones registered themselves by URL. */
+  source: text("source").$type<"builtin" | "onboarded">().notNull().default("builtin"),
+  /** Set once the merchant has proved control of its domain by publishing the token below. */
+  domainVerifiedAt: ts("domain_verified_at"),
+  verificationToken: text("verification_token"),
+  ordersUrl: text("orders_url"),
+  returnsUrl: text("returns_url"),
+  registeredBy: text("registered_by"),
   createdAt: ts("created_at").notNull().defaultNow(),
 });
 
 export type PurchaseStatus =
   | "blocked" | "pending_approval" | "declined" | "paying" | "captured" | "payment_failed"
-  | "refund_requested" | "refunded" | "disputed";
+  | "refund_requested" | "refunded" | "partially_refunded" | "disputed";
 
 export const purchases = pgTable("purchases", {
   id: text("id").primaryKey(),
@@ -75,16 +99,30 @@ export const purchases = pgTable("purchases", {
   paypalOrderId: text("paypal_order_id"),
   paypalCaptureId: text("paypal_capture_id"),
   paypalRefundId: text("paypal_refund_id"),
+  refundedCents: integer("refunded_cents").notNull().default(0),
+  /** The unit price the agent said it saw. */
+  expectedPriceCents: integer("expected_price_cents"),
+  /** Lets an agent retry a request without buying twice. */
+  idempotencyKey: text("idempotency_key"),
+  /** A secret link the user can open to approve or decline without signing in to the dashboard. */
+  approvalToken: text("approval_token"),
   createdAt: ts("created_at").notNull().defaultNow(),
   updatedAt: ts("updated_at").notNull().defaultNow(),
 });
+
+export type SettlementOffer = { id: string; type: "full_refund" | "partial_refund" | "replacement"; amountCents?: number; sku?: string; reason: string };
+export type SettlementTurn = { by: "buyer_agent" | "merchant_agent" | "user"; action: "ask" | "offer" | "counter" | "accept" | "decline" | "refund"; offer?: SettlementOffer; note: string; at: string };
 
 export const cases = pgTable("cases", {
   id: text("id").primaryKey(),
   purchaseId: text("purchase_id").notNull().references(() => purchases.id),
   userId: text("user_id").notNull().references(() => users.id),
   report: text("report").notNull(),
-  status: text("status").$type<"open" | "refund_requested" | "refunded" | "merchant_declined" | "disputed" | "closed">().notNull().default("open"),
+  status: text("status").$type<"open" | "refund_requested" | "offer_pending" | "refunded" | "settled" | "merchant_declined" | "disputed" | "closed">().notNull().default("open"),
+  /** The negotiation between the buyer's and the merchant's agents, turn by turn. */
+  transcript: jsonb("transcript").$type<SettlementTurn[]>(),
+  /** An offer waiting for the user's decision. */
+  pendingOffer: jsonb("pending_offer").$type<SettlementOffer | null>(),
   analysis: jsonb("analysis").$type<Record<string, unknown>>(),
   merchantResponse: jsonb("merchant_response").$type<Record<string, unknown>>(),
   paypalRefundId: text("paypal_refund_id"),
@@ -130,6 +168,16 @@ export const storeOrders = pgTable("store_orders", {
   disputeId: text("dispute_id"),
   disputeStatus: text("dispute_status"),
   note: text("note"),
+  /** An offer this store has made and is holding open. */
+  offer: jsonb("offer").$type<SettlementOffer | null>(),
+  replacementSku: text("replacement_sku"),
   evidence: jsonb("evidence").$type<Record<string, unknown>>(),
   createdAt: ts("created_at").notNull().defaultNow(),
+});
+
+/** What a demo store has published on its own site (stands in for the merchant editing its website). */
+export const storeSettings = pgTable("store_settings", {
+  slug: text("slug").primaryKey(),
+  verificationToken: text("verification_token"),
+  updatedAt: ts("updated_at").notNull().defaultNow(),
 });

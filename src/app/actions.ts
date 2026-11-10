@@ -1,13 +1,20 @@
 "use server";
+// Every mutation the web app can make. Each one resolves the signed-in user itself; none trusts a user id from the client.
 import { revalidatePath } from "next/cache";
-import { confirmMandate, createAgent, decideApproval, reportProblem, resolveMerchantNames, revokeMandate } from "@/lib/gateway";
+import type { UserSettings } from "@/lib/db/schema";
+import { answerOffer, confirmMandate, createAgent, decideApproval, decideByToken, pauseAgent, reportProblem, resolveMerchantNames, resumeAgent, revokeAgent, revokeMandate, setFrozen, updateSettings } from "@/lib/gateway";
+import { publicKeyPem, verifyBundle, type LedgerRow } from "@/lib/ledger";
 import { compileMandate } from "@/lib/llm";
+import { registerMerchant, verifyMerchantDomain } from "@/lib/merchants";
 import { MandateRulesSchema, type MandateRules } from "@/lib/rules";
 import { currentUserId } from "@/lib/session";
-import { sandboxRuling, shipOrder, syncDisputes } from "@/lib/stores/merchant";
+import { publishVerificationToken, sandboxRuling, shipOrder, syncDisputes } from "@/lib/stores/merchant";
 
-type R<T> = ({ ok: true } & T) | { ok: false; error: string };
+type R<T = object> = ({ ok: true } & T) | { ok: false; error: string };
 const fail = (e: unknown) => ({ ok: false as const, error: e instanceof Error ? e.message : String(e) });
+const done = () => { revalidatePath("/", "layout"); return { ok: true as const }; };
+
+// ---- Mandates ---------------------------------------------------------------------------------
 
 export async function compileMandateAction(text: string): Promise<R<{ rules: MandateRules; warnings: string[] }>> {
   try {
@@ -20,27 +27,80 @@ export async function compileMandateAction(text: string): Promise<R<{ rules: Man
       rules.allowedMerchants = r.resolved;
       for (const u of r.unknown) warnings.push(`"${u}" is not a merchant this gateway knows, so purchases there will be blocked.`);
     }
+    if (rules.blockedMerchants.length) rules.blockedMerchants = (await resolveMerchantNames(rules.blockedMerchants)).resolved;
     return { ok: true, rules, warnings };
   } catch (e) { return fail(e); }
 }
-export async function confirmMandateAction(text: string, rules: MandateRules): Promise<R<object>> {
+export async function confirmMandateAction(text: string, rules: MandateRules, opts: { name?: string; agentIds?: string[] | null; replaceId?: string } = {}): Promise<R> {
   try {
     const parsed = MandateRulesSchema.parse(rules);
     if (!(new Date(parsed.expiresAt) > new Date())) throw new Error("The expiry must be in the future.");
-    await confirmMandate(await currentUserId(), text.slice(0, 2000), parsed); revalidatePath("/"); return { ok: true };
+    await confirmMandate(await currentUserId(), text.slice(0, 2000), parsed, opts);
+    return done();
   } catch (e) { return fail(e); }
 }
-export async function revokeMandateAction() { await revokeMandate(await currentUserId()); revalidatePath("/"); }
+/** Revoke one mandate, or all of them when no id is given. */
+export async function revokeMandateAction(mandateId?: string): Promise<R> {
+  try { await revokeMandate(await currentUserId(), mandateId); return done(); } catch (e) { return fail(e); }
+}
+
+// ---- Agents and account -----------------------------------------------------------------------
+
 export async function createAgentAction(name: string): Promise<R<{ key: string }>> {
-  try { const { key } = await createAgent(await currentUserId(), name); revalidatePath("/"); return { ok: true, key }; } catch (e) { return fail(e); }
+  try { const { key } = await createAgent(await currentUserId(), name); revalidatePath("/", "layout"); return { ok: true, key }; } catch (e) { return fail(e); }
 }
-export async function approvalAction(purchaseId: string, approve: boolean): Promise<R<object>> {
-  try { await decideApproval(await currentUserId(), purchaseId, approve); revalidatePath("/"); return { ok: true }; } catch (e) { return fail(e); }
+export async function pauseAgentAction(agentId: string): Promise<R> { try { await pauseAgent(await currentUserId(), agentId); return done(); } catch (e) { return fail(e); } }
+export async function resumeAgentAction(agentId: string): Promise<R> { try { await resumeAgent(await currentUserId(), agentId); return done(); } catch (e) { return fail(e); } }
+export async function revokeAgentAction(agentId: string): Promise<R> { try { await revokeAgent(await currentUserId(), agentId); return done(); } catch (e) { return fail(e); } }
+/** The kill switch. */
+export async function setFrozenAction(frozen: boolean): Promise<R> { try { await setFrozen(await currentUserId(), frozen); return done(); } catch (e) { return fail(e); } }
+export async function updateSettingsAction(patch: UserSettings): Promise<R> { try { await updateSettings(await currentUserId(), patch); return done(); } catch (e) { return fail(e); } }
+
+// ---- Purchases --------------------------------------------------------------------------------
+
+export async function approvalAction(purchaseId: string, approve: boolean): Promise<R> {
+  try { await decideApproval(await currentUserId(), purchaseId, approve); return done(); } catch (e) { return fail(e); }
 }
-export async function reportProblemAction(purchaseId: string, report: string): Promise<R<{ message: string }>> {
-  try { const r = await reportProblem(await currentUserId(), purchaseId, report); revalidatePath("/"); return { ok: true, message: r.message }; } catch (e) { return fail(e); }
+/** Approve or decline from the secret link, without a dashboard session. */
+export async function approveByTokenAction(token: string, approve: boolean): Promise<R<{ status: string }>> {
+  try { const p = await decideByToken(token, approve); revalidatePath("/", "layout"); return { ok: true, status: p.status }; } catch (e) { return fail(e); }
 }
-// Store back office (the merchant's side of the demo).
+export async function reportProblemAction(purchaseId: string, report: string): Promise<R<{ message: string; status: string }>> {
+  try { const r = await reportProblem(await currentUserId(), purchaseId, report); revalidatePath("/", "layout"); return { ok: true, message: r.message, status: r.case.status }; } catch (e) { return fail(e); }
+}
+export async function answerOfferAction(caseId: string, accept: boolean): Promise<R<{ message: string; status: string }>> {
+  try { const r = await answerOffer(await currentUserId(), caseId, accept); revalidatePath("/", "layout"); return { ok: true, message: r.message, status: r.case.status }; } catch (e) { return fail(e); }
+}
+
+// ---- Merchants --------------------------------------------------------------------------------
+
+export async function registerMerchantAction(url: string): Promise<R<{ merchantId: string; token: string | null; wellKnownUrl: string }>> {
+  try {
+    const m = await registerMerchant(await currentUserId(), url);
+    revalidatePath("/", "layout");
+    return { ok: true, merchantId: m.id, token: m.domainVerifiedAt ? null : m.verificationToken, wellKnownUrl: `${m.baseUrl}/.well-known/mandate-merchant.json` };
+  } catch (e) { return fail(e); }
+}
+export async function verifyMerchantAction(merchantId: string): Promise<R<{ name: string }>> {
+  try { const m = await verifyMerchantDomain(await currentUserId(), merchantId); revalidatePath("/", "layout"); return { ok: true, name: m.name }; } catch (e) { return fail(e); }
+}
+
+// ---- Evidence ---------------------------------------------------------------------------------
+
+/** Check an evidence record anyone hands you: every entry must be signed by this gateway and hash correctly. */
+export async function verifyEvidenceAction(json: string): Promise<R<{ purchaseId: string | null; entries: { seq: number; type: string; at: string }[] }>> {
+  try {
+    const b = JSON.parse(json) as { purchaseId?: string; publicKey?: string; entries?: LedgerRow[] };
+    if (!Array.isArray(b.entries) || !b.entries.length || typeof b.publicKey !== "string") throw new Error("This is not an evidence record: it needs a publicKey and entries.");
+    const v = verifyBundle({ publicKey: b.publicKey, entries: b.entries }, publicKeyPem());
+    if (!v.ok) throw new Error(`Verification failed: ${v.why}.`);
+    return { ok: true, purchaseId: b.purchaseId ?? null, entries: b.entries.map((e) => ({ seq: e.seq, type: e.type, at: e.at })) };
+  } catch (e) { return fail(e instanceof SyntaxError ? new Error("That is not valid JSON.") : e); }
+}
+
+// ---- Store back office (the merchant's side of the demo) --------------------------------------
+
 export async function shipOrderAction(slug: string, orderId: string, sku: string) { await shipOrder(slug, orderId, sku); revalidatePath(`/stores/${slug}/admin`); }
 export async function syncDisputesAction(slug: string) { const r = await syncDisputes(slug); revalidatePath(`/stores/${slug}/admin`); return r; }
 export async function sandboxRulingAction(slug: string, orderId: string) { await sandboxRuling(slug, orderId); revalidatePath(`/stores/${slug}/admin`); }
+export async function publishTokenAction(slug: string, token: string) { await publishVerificationToken(slug, token); revalidatePath(`/stores/${slug}/admin`); }

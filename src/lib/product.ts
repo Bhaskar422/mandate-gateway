@@ -1,4 +1,5 @@
 import { sha256 } from "./ids";
+import { scanPage, type PageSignal } from "./risk";
 
 export type ProductSnapshot = {
   url: string; fetchedAt: string; pageSha256: string;
@@ -6,6 +7,8 @@ export type ProductSnapshot = {
   priceCents: number; currency: string; availability: string | null;
   /** Visible page text, as the agent would have seen it. Kept as evidence. */
   pageText: string;
+  /** Deterministic findings about the page: text aimed at AI agents, text hidden from shoppers. */
+  signals?: PageSignal[];
 };
 
 type Ld = Record<string, unknown>;
@@ -29,6 +32,7 @@ export function parseProduct(url: string, html: string, now = new Date()): Produ
       category: p.category ? String(p.category) : null,
       priceCents: Math.round(price * 100), currency: currency.toUpperCase(),
       availability: offer?.availability ? String(offer.availability).split("/").pop()! : null,
+      signals: scanPage(html, String(p.description ?? "")),
       pageText: html.replace(/<(script|style)[\s\S]*?<\/\1>/gi, " ").replace(/<[^>]+>/g, " ").replace(/&[a-z#0-9]+;/gi, " ").replace(/\s+/g, " ").trim().slice(0, 6000),
     };
   }

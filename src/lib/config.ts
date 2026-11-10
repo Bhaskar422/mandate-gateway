@@ -9,15 +9,19 @@ export const paypalBase = () => (process.env.PAYPAL_ENV === "live" ? "https://ap
 export const gatewayCreds = (): PayPalCreds | null =>
   process.env.PAYPAL_CLIENT_ID && process.env.PAYPAL_CLIENT_SECRET
     ? { clientId: process.env.PAYPAL_CLIENT_ID, secret: process.env.PAYPAL_CLIENT_SECRET } : null;
+/** Demo simplification: a store without its own sandbox business account borrows another store's. */
+const SHARED_ACCOUNT: Record<string, string> = { peak: "stride" };
 /** Each demo store is its own PayPal business with its own REST app, e.g. PAYPAL_STORE_STRIDE_CLIENT_ID. */
 export function storeCreds(slug: string): PayPalCreds | null {
   const k = `PAYPAL_STORE_${slug.toUpperCase()}`;
   const clientId = process.env[`${k}_CLIENT_ID`], secret = process.env[`${k}_CLIENT_SECRET`];
-  return clientId && secret ? { clientId, secret } : null;
+  if (clientId && secret) return { clientId, secret };
+  return SHARED_ACCOUNT[slug] ? storeCreds(SHARED_ACCOUNT[slug]) : null;
 }
-export const storePayee = (slug: string) => {
+export const storePayee = (slug: string): { merchantId: string | null; email: string | null } => {
   const k = `PAYPAL_STORE_${slug.toUpperCase()}`;
-  return { merchantId: process.env[`${k}_MERCHANT_ID`] ?? null, email: process.env[`${k}_EMAIL`] ?? null };
+  const own = { merchantId: process.env[`${k}_MERCHANT_ID`] ?? null, email: process.env[`${k}_EMAIL`] ?? null };
+  return own.merchantId || own.email || !SHARED_ACCOUNT[slug] ? own : storePayee(SHARED_ACCOUNT[slug]);
 };
 /** With no PayPal credentials the gateway simulates PayPal so the flows can be exercised. Clearly labelled in the UI. */
 export const paypalSimulated = () => !gatewayCreds();
