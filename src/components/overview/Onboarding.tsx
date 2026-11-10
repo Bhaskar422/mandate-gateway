@@ -1,5 +1,5 @@
 "use client";
-import { ArrowRight, Bot, Check, FileSignature, ScrollText, ShieldCheck, Wallet } from "lucide-react";
+import { ArrowRight, Bot, Check, FileSignature, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 import { useAccount } from "../AccountProvider";
 
@@ -7,13 +7,13 @@ import { useAccount } from "../AccountProvider";
 export function useSetup() {
   const { state } = useAccount();
   const steps = [
-    { key: "paypal", done: !!state.paypal, icon: <Wallet size={18} aria-hidden />, title: "Link your PayPal account",
+    { key: "paypal", done: !!state.paypal, title: "Link your PayPal account",
       body: "You log in at PayPal once and it saves your wallet for this gateway. Agents never see your PayPal login or any payment details.",
       done_text: state.paypal ? `Linked${state.paypal.email ? ` as ${state.paypal.email}` : ""}.` : "", cta: "Link PayPal", href: "/api/paypal/link", external: true },
-    { key: "mandate", done: state.mandates.length > 0, icon: <ScrollText size={18} aria-hidden />, title: "Write a mandate",
+    { key: "mandate", done: state.mandates.length > 0, title: "Write a mandate",
       body: "Say in plain English what an agent may buy and how much it may spend. You review the exact rules before they take effect.",
       done_text: `${state.mandates.length} active.`, cta: "Write a mandate", href: "/mandates?new=1", external: false },
-    { key: "agent", done: state.agents.some((a) => a.status !== "revoked"), icon: <Bot size={18} aria-hidden />, title: "Connect an agent",
+    { key: "agent", done: state.agents.some((a) => a.status !== "revoked"), title: "Connect an agent",
       body: "Give Claude, ChatGPT or your own agent a key to this gateway. It can then ask the gateway to pay, and only that.",
       done_text: `${state.agents.filter((a) => a.status !== "revoked").length} connected.`, cta: "Connect an agent", href: "/agents?new=1", external: false },
   ];

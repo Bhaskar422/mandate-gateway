@@ -108,7 +108,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               <li key={i.href}>
                 <Link href={i.href} aria-current={active ? "page" : undefined} className={`relative flex flex-col items-center gap-0.5 py-2 text-[11px] font-medium ${active ? "text-brand-ink" : "text-ink-2"}`}>
                   {i.icon}{i.label}
-                  {!!i.badge && <span className="num absolute right-[22%] top-1 min-w-4 rounded-full bg-warn px-1 text-center text-[10px] font-bold leading-4 text-white" aria-label={`${i.badge} waiting for you`}>{i.badge}</span>}
+                  {!!i.badge && <span className="num absolute right-[22%] top-1 min-w-4 rounded-full bg-warn-ink px-1 text-center text-[10px] font-bold leading-4 text-surface" aria-label={`${i.badge} waiting for you`}>{i.badge}</span>}
                 </Link>
               </li>
             );

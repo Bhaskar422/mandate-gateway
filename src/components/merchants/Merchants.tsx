@@ -85,10 +85,12 @@ function Onboard({ onClose }: { onClose: () => void }) {
           <label htmlFor="store-url" className="field-label">Store address</label>
           <input id="store-url" className="field code max-w-xl" inputMode="url" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://shop.example.com" required disabled={register.pending} autoFocus />
           <p className="field-hint">Must be a public https address. Product pages under this address become purchasable once the store has proved it owns the site.</p>
-          <p className="mt-3 text-sm text-ink-2">
-            Want to try it? The demo store Peak Trail Supply is not in the registry until someone onboards it:{" "}
-            <button type="button" className="link code" onClick={() => setUrl(`${state.appUrl}/stores/peak`)}>{state.appUrl}/stores/peak</button>
-          </p>
+          {!state.merchants.some((m) => m.baseUrl === `${state.appUrl}/stores/peak`) && (
+            <p className="mt-3 text-sm text-ink-2">
+              Want to try it? The demo store Peak Trail Supply is not in the registry until someone onboards it:{" "}
+              <button type="button" className="link code" onClick={() => setUrl(`${state.appUrl}/stores/peak`)}>{state.appUrl}/stores/peak</button>
+            </p>
+          )}
           <div className="mt-4"><Button type="submit" variant="primary" loading={register.pending} loadingText="Registering" disabled={!url.trim()}>Continue</Button></div>
           {register.error && <div className="mt-3"><ErrorText>{register.error}</ErrorText></div>}
         </form>

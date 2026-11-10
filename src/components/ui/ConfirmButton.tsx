@@ -14,7 +14,7 @@ export default function ConfirmButton({ children, question, confirmLabel, onConf
   useEffect(() => {
     if (!asking) return;
     yes.current?.focus();
-    const t = setTimeout(() => setAsking(false), 8000);
+    const t = setTimeout(() => setAsking(false), 15000);
     return () => clearTimeout(t);
   }, [asking]);
 

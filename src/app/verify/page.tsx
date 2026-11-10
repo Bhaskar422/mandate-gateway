@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import LedgerCheck from "@/components/public/LedgerCheck";
 import Verifier from "@/components/public/Verifier";
 import PublicShell from "@/components/shell/PublicShell";
 
@@ -28,6 +29,7 @@ export default function VerifyPage() {
           </div>
         ))}
       </section>
+      <LedgerCheck />
       <p className="mt-4 text-sm text-ink-3">
         <a className="link" href="/.well-known/mandate-gateway.json">Gateway public key</a> · <a className="link" href="/api/ledger/head">Signed ledger head</a>. The record is sent to this gateway to be checked and is not stored.
       </p>

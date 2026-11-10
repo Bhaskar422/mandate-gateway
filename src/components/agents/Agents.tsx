@@ -28,7 +28,7 @@ function AgentCard({ a, onKey }: { a: AgentView; onKey: (r: Reveal) => void }) {
   const s = STATUS[a.status];
 
   return (
-    <article className={`card p-5 sm:p-6 ${a.status === "revoked" ? "opacity-75" : ""}`}>
+    <article className={`card p-5 sm:p-6 ${a.status === "revoked" ? "bg-raised" : ""}`}>
       <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-3">
         <div className="flex min-w-0 items-center gap-3">
           <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-sunken text-ink-2"><Bot size={19} aria-hidden /></span>
