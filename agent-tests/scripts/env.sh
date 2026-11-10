@@ -11,5 +11,7 @@ if [ -f "$_AT_ROOT/.env.local" ]; then set -a; . "$_AT_ROOT/.env.local"; set +a;
 export AGENT_TESTS_PORT="${AGENT_TESTS_PORT:-3100}"
 export GATEWAY_URL="${GATEWAY_URL:-http://localhost:$AGENT_TESTS_PORT}"
 export APP_URL="$GATEWAY_URL"
+# Its own build folder, so the test gateway can run beside a dev server started from the same checkout.
+export NEXT_DIST_DIR="${NEXT_DIST_DIR:-.next-agent-tests}"
 export DATABASE_URL="${AGENT_TESTS_DATABASE_URL:-postgres://postgres@localhost:54329/mandate_agent_tests}"
 export AGENT_TESTS_ROOT="$_AT_ROOT/agent-tests"
