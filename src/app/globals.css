@@ -6,6 +6,9 @@
    Every colour is a variable so the light and dark themes share all component styles.
    ------------------------------------------------------------------------------------------------ */
 :root {
+  --ff-sans: var(--font-body), ui-sans-serif, system-ui, sans-serif;
+  --ff-serif: var(--font-display), ui-serif, Georgia, serif;
+  --ff-mono: var(--font-code), ui-monospace, SFMono-Regular, Menlo, monospace;
   color-scheme: light;
   --bg: #f5f3ee; --surface: #ffffff; --raised: #faf9f6; --sunken: #efece5;
   --line: #e2ded4; --line-strong: #c9c3b6;
@@ -65,9 +68,7 @@
   --color-info: var(--info); --color-info-soft: var(--info-soft); --color-info-ink: var(--info-ink);
   --color-dispute: var(--dispute); --color-dispute-soft: var(--dispute-soft); --color-dispute-ink: var(--dispute-ink);
   --color-flag: var(--flag); --color-flag-soft: var(--flag-soft); --color-flag-ink: var(--flag-ink);
-  --font-sans: var(--font-body), ui-sans-serif, system-ui, sans-serif;
-  --font-serif: var(--font-display), ui-serif, Georgia, serif;
-  --font-mono: var(--font-code), ui-monospace, SFMono-Regular, Menlo, monospace;
+  --font-sans: var(--ff-sans); --font-serif: var(--ff-serif); --font-mono: var(--ff-mono);
   /* Type scale: 12 / 13 / 14 / 16 / 20 / 26 / 34 */
   --text-xs: 0.75rem; --text-xs--line-height: 1.1rem;
   --text-sm: 0.8125rem; --text-sm--line-height: 1.25rem;
@@ -76,12 +77,11 @@
   --text-xl: 1.25rem; --text-xl--line-height: 1.7rem;
   --text-2xl: 1.625rem; --text-2xl--line-height: 2rem;
   --text-3xl: 2.125rem; --text-3xl--line-height: 2.45rem;
-  --radius-card: 12px;
   --shadow-card: var(--shadow);
 }
 
 html { -webkit-text-size-adjust: 100%; }
-body { background: var(--bg); color: var(--ink); font-family: var(--font-sans); font-size: 0.875rem; line-height: 1.4rem; overflow-x: hidden; }
+body { background: var(--bg); color: var(--ink); font-family: var(--ff-sans); font-size: 0.875rem; line-height: 1.4rem; overflow-x: hidden; }
 ::selection { background: var(--brand-soft); color: var(--brand-ink); }
 :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 4px; }
 a { text-underline-offset: 3px; }
@@ -89,15 +89,15 @@ button, summary, label[for], select { cursor: pointer; }
 button:disabled { cursor: not-allowed; }
 
 /* ---- Text ------------------------------------------------------------------------------------- */
-.display { font-family: var(--font-serif); font-weight: 500; letter-spacing: -0.012em; }
+.display { font-family: var(--ff-serif); font-weight: 500; letter-spacing: -0.012em; }
 .eyebrow { font-size: 0.6875rem; line-height: 1rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-3); }
 .num { font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }
 .link { color: var(--brand-ink); text-decoration: underline; text-decoration-color: color-mix(in srgb, var(--brand-ink) 40%, transparent); }
 .link:hover { text-decoration-color: currentColor; }
-.quote { font-family: var(--font-serif); font-size: 1rem; line-height: 1.55rem; color: var(--ink); }
+.quote { font-family: var(--ff-serif); font-size: 1rem; line-height: 1.55rem; color: var(--ink); }
 
 /* ---- Surfaces --------------------------------------------------------------------------------- */
-.card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-card); }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; }
 .rule { border-color: var(--line); }
 
 /* ---- Buttons ---------------------------------------------------------------------------------- */
@@ -145,8 +145,8 @@ input[type="checkbox"], input[type="radio"], input[type="range"] { accent-color:
 .tone-softbg { background: var(--t-soft); }
 
 /* ---- Code ------------------------------------------------------------------------------------- */
-.code { font-family: var(--font-mono); font-size: 0.75rem; line-height: 1.2rem; }
-.codeblock { font-family: var(--font-mono); font-size: 0.75rem; line-height: 1.25rem; background: var(--sunken); border: 1px solid var(--line); border-radius: 8px; padding: 0.75rem 0.85rem; overflow-x: auto; white-space: pre; color: var(--ink); }
+.code { font-family: var(--ff-mono); font-size: 0.75rem; line-height: 1.2rem; }
+.codeblock { font-family: var(--ff-mono); font-size: 0.75rem; line-height: 1.25rem; background: var(--sunken); border: 1px solid var(--line); border-radius: 8px; padding: 0.75rem 0.85rem; overflow-x: auto; white-space: pre; color: var(--ink); }
 .codeblock.wrap { white-space: pre-wrap; overflow-wrap: anywhere; }
 
 /* ---- Motion ----------------------------------------------------------------------------------- */
