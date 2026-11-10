@@ -8,10 +8,14 @@ import { closeDb } from "./seed";
 import { ARCHITECTURES, Recorder, StepLimitError, type Architecture, type Framework, type RunRecord } from "./types";
 
 const args = process.argv.slice(2);
-const opt = (name: string) => { const i = args.indexOf(`--${name}`); return i >= 0 ? args[i + 1] : undefined; };
+const opt = (name: string) => { const i = args.lastIndexOf(`--${name}`); return i >= 0 ? args[i + 1] : undefined; };
 const listOpt = (name: string) => opt(name)?.split(",").map((s) => s.trim()).filter(Boolean);
 const GATEWAY = (process.env.GATEWAY_URL ?? "http://localhost:3100").replace(/\/$/, "");
-const DEFAULT_MODEL: Record<Framework["provider"], string> = { anthropic: "claude-haiku-5-5", openai: "gpt-5.1-mini", google: "gemini-2.5-flash" };
+const DEFAULT_MODEL: Record<Framework["provider"], string> = {
+  anthropic: "claude-haiku-5-5", openai: process.env.AGENT_TESTS_OPENAI_MODEL ?? "gpt-5-mini", google: process.env.AGENT_TESTS_GOOGLE_MODEL ?? "gemini-2.5-flash" };
+const providerOf = (model: string): Framework["provider"] => (model.startsWith("claude") ? "anthropic" : model.startsWith("gemini") ? "google" : "openai");
+/** --model applies to the frameworks that can drive it; the others keep their provider's default. */
+const modelFor = (fw: Framework, requested?: string) => (requested && providerOf(requested) === fw.provider ? requested : DEFAULT_MODEL[fw.provider]);
 
 class TurnTimeout extends Error { constructor(ms: number) { super(`turn exceeded the ${Math.round(ms / 1000)}s wall-clock limit`); } }
 
@@ -58,7 +62,7 @@ async function runOne(fw: Framework, architecture: Architecture, model: string, 
   const status = agentProblem?.kind === "error" ? "error" : agentProblem ? "fail" : verdict!.status;
   const reason = agentProblem ? `${agentProblem.message}${verdict ? ` | gateway state: ${verdict.status}${verdict.reason ? ` (${verdict.reason})` : ""}` : ""}` : verdict!.reason;
   return {
-    ...base, status, reason: reason.slice(0, 600), injection: verdict?.injection ?? null,
+    ...base, status, reason: reason.replace(/mk_[A-Za-z0-9_-]+|sk-ant-[A-Za-z0-9_-]+/g, "<redacted>").slice(0, 600), injection: verdict?.injection ?? null,
     toolCalls: recorder.toolCalls, modelCalls: recorder.modelCalls, inputTokens: recorder.inputTokens, outputTokens: recorder.outputTokens,
     costUsd: recorder.reportedCostUsd ?? estimateCost(model, recorder.inputTokens, recorder.outputTokens), durationMs: Date.now() - started,
     finalTexts: finalTexts.map((t) => t.slice(0, 1500)), purchases: verdict?.purchases, notes: verdict?.notes,
@@ -73,14 +77,13 @@ async function main() {
   const jobs: (() => Promise<RunRecord>)[] = [];
   for (const fw of frameworks) for (const a of ARCHITECTURES.filter((x) => !archFilter || archFilter.includes(x)))
     for (const sc of SCENARIOS.filter((s) => !scFilter || scFilter.includes(s.name)))
-      jobs.push(() => runOne(fw, a, opt("model") ?? DEFAULT_MODEL[fw.provider], sc));
+      jobs.push(() => runOne(fw, a, modelFor(fw, opt("model")), sc));
 
-  let next = 0, failed = 0;
+  let next = 0;
   await Promise.all(Array.from({ length: Math.min(concurrency, jobs.length) }, async () => {
     while (next < jobs.length) {
       const r = await jobs[next++]();
       writeRun(r);
-      if (r.status === "fail" || r.status === "error") failed++;
       const inj = r.injection ? ` injection=${r.injection}` : "";
       console.log(`${r.status.toUpperCase().padEnd(7)} ${r.framework} / ${r.architecture} / ${r.scenario} / ${r.model}  ${(r.durationMs / 1000).toFixed(1)}s $${r.costUsd.toFixed(4)} calls=${r.modelCalls} tools=${r.toolCalls.length}${inj}${r.reason ? `  — ${r.reason}` : ""}`);
     }

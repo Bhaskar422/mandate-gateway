@@ -16,7 +16,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from frameworks import FRAMEWORKS
-from .shared import DEFAULT_MODEL, LIMITS, RUNS_DIR, SCENARIOS, estimate_cost, harness
+from .shared import LIMITS, RUNS_DIR, SCENARIOS, estimate_cost, harness, model_for
 from .types import ARCHITECTURES, AgentContext, Framework, Recorder, StepLimitError, TurnTimeout
 
 GATEWAY = os.environ.get("GATEWAY_URL", "http://localhost:3100").rstrip("/")
@@ -106,12 +106,30 @@ async def main() -> None:
     for name in ("framework", "architecture", "scenario", "model"):
         ap.add_argument(f"--{name}")
     ap.add_argument("--concurrency", type=int, default=3)
+    ap.add_argument("--construct-only", action="store_true", help="build every agent without calling a model or the gateway (works without API keys)")
     a = ap.parse_args()
     fw_filter, arch_filter, sc_filter = _csv(a.framework), _csv(a.architecture), _csv(a.scenario)
     frameworks = [f for f in FRAMEWORKS if not fw_filter or f.name in fw_filter]
     if fw_filter and len(frameworks) != len(fw_filter):
         sys.exit(f"Unknown framework in {a.framework}. Known: {', '.join(f.name for f in FRAMEWORKS)}")
-    jobs = [(fw, arch, a.model or DEFAULT_MODEL[fw.provider], sc)
+    if a.construct_only:
+        failed = 0
+        for fw in frameworks:
+            for arch in fw.architectures:
+                if arch_filter and arch not in arch_filter:
+                    continue
+                os.environ.setdefault(fw.requires_env, "not-a-real-key")  # constructing must not need a working key
+                ctx = AgentContext(architecture=arch, model=model_for(fw.provider, a.model), gateway_url=GATEWAY, agent_key="mk_construct_only",
+                                   recorder=Recorder(), max_steps=LIMITS["maxStepsPerTurn"], turn_timeout_s=LIMITS["turnTimeoutMs"] / 1000)
+                try:
+                    session = await fw.create(ctx)
+                    await session.close()
+                    print(f"OK      {fw.name} / {arch} constructs")
+                except Exception as e:  # noqa: BLE001
+                    failed += 1
+                    print(f"ERROR   {fw.name} / {arch}: {type(e).__name__}: {e}")
+        sys.exit(1 if failed else 0)
+    jobs = [(fw, arch, model_for(fw.provider, a.model), sc)
             for fw in frameworks for arch in ARCHITECTURES if not arch_filter or arch in arch_filter
             for sc in SCENARIOS if not sc_filter or sc["name"] in sc_filter]
     sem = asyncio.Semaphore(a.concurrency)

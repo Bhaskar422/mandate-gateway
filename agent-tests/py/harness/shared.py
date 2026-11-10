@@ -21,7 +21,20 @@ PRICES = {
     "claude-sonnet-5-5": (2.0, 10.0),
     "claude-opus-5-5": (4.0, 20.0),
 }
-DEFAULT_MODEL = {"anthropic": "claude-haiku-5-5", "openai": "gpt-5.1-mini", "google": "gemini-2.5-flash"}
+DEFAULT_MODEL = {
+    "anthropic": "claude-haiku-5-5",
+    "openai": os.environ.get("AGENT_TESTS_OPENAI_MODEL", "gpt-5-mini"),
+    "google": os.environ.get("AGENT_TESTS_GOOGLE_MODEL", "gemini-2.5-flash"),
+}
+
+
+def provider_of(model: str) -> str:
+    return "anthropic" if model.startswith("claude") else "google" if model.startswith("gemini") else "openai"
+
+
+def model_for(provider: str, requested: str | None) -> str:
+    """--model applies to the frameworks that can drive it; the others keep their provider's default."""
+    return requested if requested and provider_of(requested) == provider else DEFAULT_MODEL[provider]
 
 
 def estimate_cost(model: str, input_tokens: int, output_tokens: int) -> float:
