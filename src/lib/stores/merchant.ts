@@ -102,7 +102,8 @@ export async function handleDispute(slug: string, summary: Dispute) {
   const captureId = d.disputed_transactions?.[0]?.seller_transaction_id;
   const [o] = captureId ? await db.select().from(storeOrders).where(and(eq(storeOrders.paypalCaptureId, captureId), eq(storeOrders.storeSlug, slug))) : [];
   if (!o) return { disputeId: d.dispute_id, action: "ignored", reason: "no matching order" };
-  const can = (rel: string) => !!d.links?.some((l) => l.rel === rel);
+  // PayPal spells these link names with underscores in responses and hyphens in its docs.
+  const can = (rel: string) => !!d.links?.some((l) => l.rel.replace(/_/g, "-") === rel);
   const save = (v: Partial<typeof storeOrders.$inferInsert>) => db.update(storeOrders).set({ disputeId: d.dispute_id, ...v }).where(eq(storeOrders.id, o.id));
   if (d.status === "RESOLVED") { await save({ disputeStatus: `resolved${d.dispute_outcome?.outcome_code ? `: ${d.dispute_outcome.outcome_code}` : ""}` }); return { disputeId: d.dispute_id, action: "none", reason: "already resolved" }; }
   if (o.disputeStatus === "conceded" || o.disputeStatus === "evidence submitted") return { disputeId: d.dispute_id, action: "none", reason: `already ${o.disputeStatus}` };
