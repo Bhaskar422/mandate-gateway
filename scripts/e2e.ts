@@ -2,7 +2,7 @@
 // User-side steps call the library directly; agent-side steps go over MCP exactly as a real agent would.
 import { eq } from "drizzle-orm";
 import { db, schema } from "../src/lib/db";
-import { answerOffer, confirmMandate, createAgent, decideApproval, resumeAgent, setFrozen, updateSettings } from "../src/lib/gateway";
+import { answerOffer, confirmMandate, createAgent, decideApproval, resumeAgent, rotateAgentKey, setFrozen, updateSettings } from "../src/lib/gateway";
 import { registerMerchant, verifyMerchantDomain } from "../src/lib/merchants";
 import { llmConfigured } from "../src/lib/config";
 import { verifyChain } from "../src/lib/ledger";
@@ -194,6 +194,16 @@ async function main() {
   // Leave nothing captured: cancel the Peak order while it is still unshipped.
   const cancel = await mcp(G, "report_problem", { purchase_id: peak.purchase_id, description: "Please cancel this order, I no longer need it." }, otherKey);
   check("an unshipped order at the onboarded store is cancelled and refunded", cancel.status === "refunded", cancel.message);
+
+  // ---- Credentials, key rotation, public ledger head ---------------------------------------------
+  const cred = await rest("GET", "/mandate/credential", key);
+  const verifyCred = async (c: unknown) => (await (await fetch(`${BASE}/api/v1/credentials/verify`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(c) })).json()).valid;
+  check("a merchant can verify an agent's authorisation credential", cred.status === 200 && (await verifyCred(cred.json)) === true);
+  check("a tampered credential is rejected", (await verifyCred({ ...cred.json, payload: { ...cred.json.payload, agent: { id: "x", name: "someone else" } } })) === false);
+  const rotated = await rotateAgentKey(userId, other.id);
+  check("a rotated key replaces the old one", (await rest("GET", "/mandate", otherKey)).status === 401 && (await rest("GET", "/mandate", rotated)).status === 200);
+  const head = await (await fetch(`${BASE}/api/ledger/head`)).json();
+  check("the ledger head is published and signed", head.payload.entries > 0 && /^[0-9a-f]{64}$/.test(head.payload.head) && !!head.signature, `${head.payload.entries} entries`);
 
   const chain = await verifyChain();
   check("ledger chain verifies", chain.ok, chain.ok ? `${chain.entries} entries` : chain.why);

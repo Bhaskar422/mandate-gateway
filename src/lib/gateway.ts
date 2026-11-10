@@ -5,6 +5,8 @@ import type { SettlementOffer, SettlementTurn, UserSettings } from "./db/schema"
 import { canonical, money, newId, sha256 } from "./ids";
 import { append, evidenceBundle } from "./ledger";
 import { analyseProblem, classifyProduct } from "./llm";
+import { getUser } from "./gateway-user";
+import { notify, validNotifyUrl } from "./notify";
 import { PayPalError, payWithVault } from "./paypal";
 import { best, evaluate, type Classification, type Decision } from "./policy";
 import { fetchProduct, type ProductSnapshot } from "./product";
@@ -73,10 +75,7 @@ export async function resolveMerchantNames(names: string[]) {
 
 // ---- Account ----------------------------------------------------------------------------------
 
-export async function getUser(userId: string) {
-  const [u] = await db.select().from(users).where(eq(users.id, userId));
-  return u ?? null;
-}
+export { getUser };
 /** The kill switch. While frozen, every agent purchase is blocked, including approvals already waiting. */
 export async function setFrozen(userId: string, frozen: boolean) {
   await db.update(users).set({ frozenAt: frozen ? new Date() : null }).where(eq(users.id, userId));
@@ -85,7 +84,8 @@ export async function setFrozen(userId: string, frozen: boolean) {
 export async function updateSettings(userId: string, patch: UserSettings) {
   const u = await getUser(userId);
   const pct = patch.autoAcceptRefundPercent;
-  const settings: UserSettings = { ...(u?.settings ?? {}), ...patch, ...(pct === undefined ? {} : { autoAcceptRefundPercent: Math.min(100, Math.max(1, Math.round(pct))) }) };
+  const settings: UserSettings = { ...(u?.settings ?? {}), ...patch, ...(pct === undefined ? {} : { autoAcceptRefundPercent: Math.min(100, Math.max(1, Math.round(pct))) }),
+    ...(patch.notifyUrl === undefined ? {} : { notifyUrl: patch.notifyUrl ? validNotifyUrl(patch.notifyUrl) : null }) };
   await db.update(users).set({ settings }).where(eq(users.id, userId));
   return settings;
 }
@@ -165,6 +165,15 @@ export async function resumeAgent(userId: string, agentId: string) {
   const a = await ownAgent(userId, agentId);
   await db.update(agents).set({ pausedAt: null, pauseReason: null }).where(eq(agents.id, a.id));
   await append({ userId, type: "agent.resumed", payload: { agentId, name: a.name } });
+}
+/** Issue a new key for an agent and invalidate the old one, without losing its history or mandate scoping. */
+export async function rotateAgentKey(userId: string, agentId: string) {
+  const a = await ownAgent(userId, agentId);
+  if (a.revokedAt) throw new Error("This agent's key was revoked");
+  const key = `mk_${newId("live").slice(5)}${newId("x").slice(2)}`;
+  await db.update(agents).set({ keyHash: sha256(key), keyPrefix: key.slice(0, 9) }).where(eq(agents.id, a.id));
+  await append({ userId, type: "agent.key_rotated", payload: { agentId, name: a.name } });
+  return key;
 }
 /** Permanently disable an agent's key. */
 export async function revokeAgent(userId: string, agentId: string) {
@@ -266,7 +275,11 @@ export async function requestPurchase(agent: AgentRef, input: PurchaseInput) {
     }).returning();
     return row;
   });
-  if (purchase.status === "blocked") await autoPause(agent);
+  const name = purchase.product?.name ?? purchase.productUrl, amount = purchase.product ? money(purchase.amountCents, purchase.currency) : "";
+  const flagged = (purchase.product?.signals ?? []).some((s) => s.kind === "agent_directed_text");
+  if (purchase.status === "blocked") { await autoPause(agent); await notify(userId, { kind: "blocked", title: `Blocked: ${name} ${amount}`.trim(), detail: `${agent.name}: ${purchase.decision.reason}`, url: `${appUrl()}/purchases/${purchase.id}` }); }
+  if (purchase.status === "pending_approval") await notify(userId, { kind: flagged ? "injection_flagged" : "approval_needed", title: `Approval needed: ${name} ${amount}`.trim(),
+    detail: `${agent.name} wants to buy this. ${purchase.decision.reason}`, url: `${appUrl()}/approve/${purchase.approvalToken}` });
   return purchase.status === "paying" && !purchase.paypalOrderId ? pay(purchase.id) : purchase;
 }
 
@@ -279,6 +292,7 @@ async function autoPause(agent: AgentRef) {
   const reason = `paused automatically after ${n} blocked attempts in ${AUTO_PAUSE.windowMinutes} minutes`;
   await db.update(agents).set({ pausedAt: new Date(), pauseReason: reason }).where(eq(agents.id, a.id));
   await append({ userId: a.userId, type: "agent.paused", payload: { agentId: a.id, name: a.name, reason, automatic: true } });
+  await notify(a.userId, { kind: "agent_paused", title: `Agent paused: ${a.name}`, detail: `The gateway ${reason}. Resume it from the dashboard if this was expected.`, url: `${appUrl()}/agents` });
 }
 
 /** Charge the vaulted wallet. Only ever called after the policy engine (or the user) approved. */
@@ -465,6 +479,7 @@ export async function reportProblem(userId: string, purchaseId: string, report: 
       return settle(p, c.id, m, await askMerchant(m.returnsUrl && `${m.returnsUrl}/accept`, { purchaseId, offerId: offer.id }), transcript);
     }
     const [row] = await db.update(cases).set({ status: "offer_pending", pendingOffer: offer, merchantResponse: reply, transcript, updatedAt: new Date() }).where(eq(cases.id, c.id)).returning();
+    await notify(userId, { kind: "offer_waiting", title: `${m.name} made an offer`, detail: `${describeOffer(offer, p)}: ${offer.reason}`, url: `${appUrl()}/purchases/${p.id}` });
     return { case: row, message: `${m.name} offered ${describeOffer(offer, p)}: ${offer.reason} This is below what you told the gateway to accept automatically, so it is waiting for your decision.` };
   }
   return settle(p, c.id, m, reply, transcript);

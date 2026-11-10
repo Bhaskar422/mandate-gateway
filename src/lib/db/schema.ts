@@ -10,6 +10,8 @@ export type UserSettings = {
   autoAcceptRefundPercent?: number;
   /** Accept a replacement offer automatically. */
   autoAcceptReplacement?: boolean;
+  /** A webhook (Slack, Discord, ntfy, or your own) the gateway posts to when something needs you. */
+  notifyUrl?: string | null;
 };
 
 export const users = pgTable("users", {
