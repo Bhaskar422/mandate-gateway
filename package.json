@@ -12,7 +12,9 @@
     "db:push": "drizzle-kit push --force",
     "test": "vitest run",
     "keygen": "tsx scripts/keygen.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "agents:test": "agent-tests/run-all.sh",
+    "agents:sync": "node scripts/sync-agent-results.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.8.0",

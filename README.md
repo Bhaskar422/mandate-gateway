@@ -21,7 +21,9 @@ All of this runs against the PayPal sandbox with real sandbox money.
 | Blocked | An unverified store, a price that differs from the merchant's page, an over-budget purchase and an unregistered site are each blocked with a named reason. |
 | Prompt injection | A product page hides an instruction telling agents to buy a $100 gift card instead. An agent that obeys it is still blocked: gift cards are a blocked category and the limits are not enforced by a model. |
 | Wrong item | The store ships the wrong item. The user reports it once; the gateway sends the store the signed record, the store checks it against its own fulfilment record and refunds through PayPal. |
+| Settlement | For a claim the store's records can't confirm, the buyer's agent and the store's agent negotiate: a replacement, or a partial refund with one counter-offer. It closes automatically when the result is inside the user's settlement rules; otherwise the offer waits for the user. |
 | Dispute | The buyer opens a PayPal dispute claiming non-receipt. The store's agent answers it through the Disputes API with the signed record as a PDF and a tracking number. PayPal resolves it in the seller's favour. |
+| New merchant | A store the gateway has never seen registers by URL, publishes a token to prove it controls that URL, and only then can be paid. |
 
 ## How a purchase is decided
 
@@ -35,6 +37,36 @@ The agent supplies a product URL and what the user asked for. Everything else th
 | "Is this product running shoes?" | A model, whose answer can only narrow what is allowed |
 
 A prompt injection can change what an agent asks for. It cannot raise a limit, change a payee, or make a gift card count as shoes.
+
+## Controls
+
+- **Mandates.** Several can be active at once, each optionally scoped to chosen agents. Rules cover a total budget, per-purchase, daily and per-merchant caps, allowed categories, a merchant policy (verified only, a named list, or any registered merchant), a never-buy list, an ask-above threshold, a purchase count and an expiry. A purchase goes ahead under the first mandate that allows it.
+- **Page integrity.** The gateway scans the product page it fetched for text addressed to AI agents and for text hidden from shoppers. This is pattern matching, not a model. A flagged page never goes straight to payment: the purchase waits for the user, with the offending text shown.
+- **Kill switch.** One click freezes all agent spending, including approvals already waiting.
+- **Agent controls.** Pause, resume, revoke or rotate the key of any agent. An agent is paused automatically after five blocked attempts in ten minutes, and each agent is rate-limited.
+- **Safe retries.** `request_purchase` takes an idempotency key, and an identical request made again while the first is in flight or just paid returns the same purchase instead of charging twice.
+- **Approval links.** A purchase that needs approval carries a secret link the agent can hand to the user, who approves or declines from their phone without opening the dashboard.
+- **Notifications.** The user can give one webhook (Slack, Discord, ntfy or their own) that hears about approvals needed, blocked purchases, paused agents and merchant offers.
+- **Settlement rules.** The user decides what their agent may accept without asking: partial refunds at or above a chosen share of the price, and replacements.
+
+## For agents
+
+Agents use either door with the same key (`Authorization: Bearer mk_...`):
+
+| MCP tool (`/api/mcp`) | REST (`/api/v1`) | What it does |
+|---|---|---|
+| `get_mandate` | `GET /mandate` | What the agent may buy, and what is left |
+| `check_purchase` | `POST /purchases/check` | Dry run: paid, needs approval or blocked, and why. Nothing is recorded |
+| `request_purchase` | `POST /purchases` | Buy one product |
+| `check_status` | `GET /purchases/{id}` | Where a purchase stands |
+| `report_problem` | `POST /purchases/{id}/problems` | Start a refund or settlement |
+| | `GET /mandate/credential` | A short-lived signed proof of authorisation the agent can show a merchant |
+
+The REST API is described at `/api/v1/openapi.json`. Two endpoints are public: `POST /api/v1/credentials/verify` checks a credential an agent presented, and `GET /api/ledger/head` returns the signed head of the evidence ledger, so anyone can record it and later prove the ledger was not rewritten.
+
+## For merchants
+
+A store joins by serving one JSON file at `<store URL>/.well-known/mandate-merchant.json`: the verification token the gateway issued, its name, its PayPal payee, and optionally where to send paid orders and return requests. The gateway refuses private addresses, requires https, and only accepts callback URLs under the store's own verified URL. A registered store can be paid under a mandate that allows any registered merchant or names it; "known merchants only" still means the gateway's own verified list.
 
 ## Architecture
 
@@ -93,16 +125,19 @@ Without PayPal credentials the gateway runs with clearly labelled simulated paym
 ## Tests
 
 ```bash
-pnpm test                                             # 15 policy engine tests
-pnpm exec tsx --env-file=.env.local scripts/e2e.ts    # 17 end-to-end checks over MCP against a running server
+pnpm test                                             # unit tests: policy engine, page scanner, evidence ledger
+pnpm exec tsx --env-file=.env.local scripts/e2e.ts    # end-to-end checks over MCP and REST against a running server
 ```
 
-The end-to-end script drives the gateway as an agent would and covers the approved, blocked, injected and refunded paths plus ledger tamper detection. It passes against the hosted deployment with real sandbox payments. `scripts/gullible-agent.ts` is a deliberately naive agent that obeys instructions found in product text, for demonstrating the injection block.
+The end-to-end script drives the gateway as an agent would. It covers the approved, blocked, injected and refunded paths, the kill switch and automatic agent pause, the REST API and dry run, safe retries, scoped mandates, both settlement outcomes, merchant onboarding, credentials, key rotation and ledger tamper detection. It passes against the hosted deployment with real sandbox payments. `scripts/gullible-agent.ts` is a deliberately naive agent that obeys instructions found in product text, for demonstrating the injection block.
 
 ## Layout
 
 - [`src/lib/policy.ts`](src/lib/policy.ts): the policy engine (pure, deterministic)
-- [`src/lib/gateway.ts`](src/lib/gateway.ts): purchase, approval, payment and problem flows
+- [`src/lib/risk.ts`](src/lib/risk.ts): the page scanner for text aimed at AI agents
+- [`src/lib/gateway.ts`](src/lib/gateway.ts): purchase, approval, payment, settlement and account flows
+- [`src/lib/merchants.ts`](src/lib/merchants.ts): merchant registration and domain verification
+- [`src/lib/agent-api.ts`](src/lib/agent-api.ts): what agents see, shared by the MCP server and the REST API ([`src/app/api/v1`](src/app/api/v1))
 - [`src/lib/ledger.ts`](src/lib/ledger.ts): the evidence ledger
 - [`src/lib/paypal.ts`](src/lib/paypal.ts): Vault, Orders, refunds, Disputes, webhook verification
 - [`src/lib/llm.ts`](src/lib/llm.ts): mandate compiler, product classifier, problem analysis (Claude)
@@ -115,7 +150,9 @@ Stack: Next.js 15, TypeScript, PostgreSQL with Drizzle, the Model Context Protoc
 ## Limits of this build
 
 - **Sandbox only.** It has never run against live PayPal. Paying a third-party merchant from a vaulted wallet works in the sandbox as built; in production we expect it to need PayPal's partner onboarding for each merchant.
-- **The demo merchants live in the same app as the gateway.** They talk to it over HTTP and verify its signatures, but they share its database and deployment.
+- **The demo merchants live in the same app as the gateway.** They talk to it over HTTP and verify its signatures, but they share its database and deployment. The third store, Peak, borrows Stride's sandbox PayPal account.
+- **The page scanner is a set of patterns.** It catches the common phrasings of injected instructions, not every possible one. It is a second line behind the limits, which do not depend on it.
+- **Settlement is rule-based on both sides.** The store's returns policy and the user's acceptance rules are fixed rules; a model only classifies the buyer's complaint.
 - **A PayPal buyer cannot open a dispute through the API.** The buyer opens it in PayPal's Resolution Center; everything after that is automated on the merchant's side.
 - **The sandbox has no human reviewer**, so the final ruling in the dispute demo is triggered with PayPal's sandbox-only `adjudicate` call.
 - **Dashboard sessions are anonymous cookies**, not accounts.
