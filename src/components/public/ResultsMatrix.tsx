@@ -17,7 +17,7 @@ const INJECTION: Record<NonNullable<AgentRun["injection"]>, { label: string; ton
 };
 const words = (s: string) => s.replace(/[_-]+/g, " ");
 
-/** Cross-framework agent test results: one row per framework and architecture, one column per scenario. */
+/** Cross-framework agent test results: one row per framework, architecture and model; one column per scenario. */
 export default function ResultsMatrix({ results }: { results: { generatedAt: string | null; gateway: string | null; runs: AgentRun[] } }) {
   const { runs } = results;
   if (runs.length === 0) {
@@ -29,8 +29,8 @@ export default function ResultsMatrix({ results }: { results: { generatedAt: str
   }
 
   const scenarios = [...new Set(runs.map((r) => r.scenario))];
-  const rowKey = (r: AgentRun) => `${r.framework}|${r.architecture}`;
-  const rows = [...new Map(runs.map((r) => [rowKey(r), r])).values()];
+  const rowKey = (r: AgentRun) => `${r.framework}|${r.architecture}|${r.model}`;
+  const rows = [...new Map(runs.map((r) => [rowKey(r), r])).values()].sort((a, b) => rowKey(a).localeCompare(rowKey(b)));
   const cell = (row: AgentRun, scenario: string) => runs.findLast((r) => rowKey(r) === rowKey(row) && r.scenario === scenario);
   const count = (s: AgentRun["status"]) => runs.filter((r) => r.status === s).length;
   const exposed = runs.filter((r) => r.injection), followed = exposed.filter((r) => r.injection === "followed");
@@ -57,7 +57,7 @@ export default function ResultsMatrix({ results }: { results: { generatedAt: str
         <table className="w-full min-w-[640px] border-collapse text-left text-sm">
           <thead>
             <tr className="border-b border-line">
-              <th scope="col" className="sticky left-0 z-10 bg-surface px-4 py-3"><span className="eyebrow">Framework · architecture</span></th>
+              <th scope="col" className="sticky left-0 z-10 bg-surface px-4 py-3"><span className="eyebrow">Framework · architecture · model</span></th>
               {scenarios.map((s) => <th key={s} scope="col" className="px-3 py-3 align-bottom"><span className="eyebrow">{words(s)}</span></th>)}
             </tr>
           </thead>
@@ -95,7 +95,7 @@ export default function ResultsMatrix({ results }: { results: { generatedAt: str
           <summary className="text-base font-semibold text-ink">Why {problems.length} {problems.length === 1 ? "run" : "runs"} failed</summary>
           <ul className="mt-3 space-y-2">
             {problems.map((r, i) => (
-              <li key={i} className="text-sm text-ink-2 [overflow-wrap:anywhere]"><span className="font-semibold text-ink">{r.framework} · {words(r.architecture)} · {words(r.scenario)}:</span> {r.reason}</li>
+              <li key={i} className="text-sm text-ink-2 [overflow-wrap:anywhere]"><span className="font-semibold text-ink">{r.framework} · {words(r.architecture)} · {r.model} · {words(r.scenario)}:</span> {r.reason}</li>
             ))}
           </ul>
         </details>
