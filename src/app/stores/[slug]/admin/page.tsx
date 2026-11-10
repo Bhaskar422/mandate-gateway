@@ -1,5 +1,5 @@
 import { desc, eq } from "drizzle-orm";
-import { shipOrderAction, syncDisputesAction } from "@/app/actions";
+import { sandboxRulingAction, shipOrderAction, syncDisputesAction } from "@/app/actions";
 import { storeCreds } from "@/lib/config";
 import { db, schema } from "@/lib/db";
 import { money } from "@/lib/ids";
@@ -30,12 +30,13 @@ export default async function StoreAdmin({ params }: { params: Promise<{ slug: s
                   <td className="mono py-3 text-xs">{o.id}<br /><span className="text-slate-400">{o.paypalCaptureId}</span></td>
                   <td>{name(o.sku)}</td><td>{money(o.amountCents)}</td>
                   <td><span className="font-semibold">{o.status}</span>{o.disputeStatus && <span className="ml-1 text-orange-700">· dispute {o.disputeStatus}</span>}{o.note && <p className="max-w-xs text-xs text-slate-500">{o.note}</p>}</td>
-                  <td className={o.shippedSku && o.shippedSku !== o.sku ? "font-semibold text-red-700" : ""}>{o.shippedSku ? name(o.shippedSku) : "—"}</td>
+                  <td className={o.shippedSku && o.shippedSku !== o.sku ? "font-semibold text-red-700" : ""}>{o.shippedSku ? name(o.shippedSku) : "—"}{o.tracking && <span className="mono block text-xs font-normal text-slate-400">{o.tracking}</span>}</td>
                   <td className="text-right">{o.status === "paid" && (
                     <div className="flex justify-end gap-2">
                       <form action={shipOrderAction.bind(null, slug, o.id, o.sku)}><button className="btn btn-ghost !py-1 !text-xs">Ship order</button></form>
                       <form action={shipOrderAction.bind(null, slug, o.id, wrong.sku)}><button className="btn btn-danger !py-1 !text-xs" title="Demo: the warehouse picks the wrong item">Ship wrong item</button></form>
-                    </div>)}</td>
+                    </div>)}
+                    {o.disputeStatus === "evidence submitted" && <form action={sandboxRulingAction.bind(null, slug, o.id)}><button className="btn btn-ghost !py-1 !text-xs" title="Sandbox only: stands in for PayPal's reviewer">Sandbox: PayPal rules</button></form>}</td>
                 </tr>);
             })}
           </tbody>

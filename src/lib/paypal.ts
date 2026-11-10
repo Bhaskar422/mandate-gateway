@@ -103,19 +103,23 @@ export async function refundCapture(c: PayPalCreds | null, captureId: string, a:
 // ---- Disputes: merchant-side only. A buyer cannot open one through the API. -----------------
 
 export type Dispute = { dispute_id: string; reason: string; status: string; dispute_state?: string; dispute_life_cycle_stage?: string;
-  dispute_amount?: { value: string; currency_code: string }; disputed_transactions?: { seller_transaction_id?: string; buyer_transaction_id?: string; custom?: string }[]; links?: Link[] };
+  dispute_amount?: { value: string; currency_code: string }; disputed_transactions?: { seller_transaction_id?: string; buyer_transaction_id?: string; custom?: string }[]; links?: Link[];
+  dispute_outcome?: { outcome_code?: string } };
 
 export const listDisputes = (c: PayPalCreds, q: { transactionId?: string } = {}) =>
   call<{ items?: Dispute[] }>(c, "GET", `/v1/customer/disputes${q.transactionId ? `?disputed_transaction_id=${encodeURIComponent(q.transactionId)}` : "?page_size=20"}`);
 export const getDispute = (c: PayPalCreds, id: string) => call<Dispute>(c, "GET", `/v1/customer/disputes/${id}`);
+/** Sandbox only: stands in for the PayPal agent who rules on a dispute that is under review. */
+export const adjudicate = (c: PayPalCreds, id: string, outcome: "SELLER_FAVOR" | "BUYER_FAVOR") =>
+  call(c, "POST", `/v1/customer/disputes/${id}/adjudicate`, { adjudication_outcome: outcome });
 export const acceptClaim = (c: PayPalCreds, id: string, note: string) =>
   call(c, "POST", `/v1/customer/disputes/${id}/accept-claim`, { note: note.slice(0, 2000) });
 export const sendDisputeMessage = (c: PayPalCreds, id: string, message: string) =>
   call(c, "POST", `/v1/customer/disputes/${id}/send-message`, { message: message.slice(0, 2000) });
 /** Attach the signed evidence record to a dispute. PayPal takes the JSON `input` part plus the file itself. */
-export function provideEvidence(c: PayPalCreds, id: string, a: { notes: string; evidenceType: string; filename: string; file: Buffer }) {
+export function provideEvidence(c: PayPalCreds, id: string, a: { notes: string; evidenceType: string; evidenceInfo?: Record<string, unknown>; filename: string; file: Buffer }) {
   const form = new FormData();
-  form.append("input", new Blob([JSON.stringify({ evidences: [{ evidence_type: a.evidenceType, notes: a.notes.slice(0, 2000) }] })], { type: "application/json" }));
+  form.append("input", new Blob([JSON.stringify({ evidences: [{ evidence_type: a.evidenceType, ...(a.evidenceInfo ? { evidence_info: a.evidenceInfo } : {}), notes: a.notes.slice(0, 2000) }] })], { type: "application/json" }));
   form.append("file1", new Blob([new Uint8Array(a.file)], { type: "application/pdf" }), a.filename);
   return call(c, "POST", `/v1/customer/disputes/${id}/provide-evidence`, undefined, { form });
 }

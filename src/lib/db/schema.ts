@@ -123,6 +123,7 @@ export const storeOrders = pgTable("store_orders", {
   paypalCaptureId: text("paypal_capture_id"),
   sku: text("sku").notNull(),
   shippedSku: text("shipped_sku"),
+  tracking: text("tracking"),
   amountCents: integer("amount_cents").notNull(),
   status: text("status").$type<"paid" | "shipped" | "refunded">().notNull().default("paid"),
   paypalRefundId: text("paypal_refund_id"),

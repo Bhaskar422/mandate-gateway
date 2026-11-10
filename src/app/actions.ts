@@ -4,7 +4,7 @@ import { confirmMandate, createAgent, decideApproval, reportProblem, resolveMerc
 import { compileMandate } from "@/lib/llm";
 import { MandateRulesSchema, type MandateRules } from "@/lib/rules";
 import { currentUserId } from "@/lib/session";
-import { shipOrder, syncDisputes } from "@/lib/stores/merchant";
+import { sandboxRuling, shipOrder, syncDisputes } from "@/lib/stores/merchant";
 
 type R<T> = ({ ok: true } & T) | { ok: false; error: string };
 const fail = (e: unknown) => ({ ok: false as const, error: e instanceof Error ? e.message : String(e) });
@@ -43,3 +43,4 @@ export async function reportProblemAction(purchaseId: string, report: string): P
 // Store back office (the merchant's side of the demo).
 export async function shipOrderAction(slug: string, orderId: string, sku: string) { await shipOrder(slug, orderId, sku); revalidatePath(`/stores/${slug}/admin`); }
 export async function syncDisputesAction(slug: string) { const r = await syncDisputes(slug); revalidatePath(`/stores/${slug}/admin`); return r; }
+export async function sandboxRulingAction(slug: string, orderId: string) { await sandboxRuling(slug, orderId); revalidatePath(`/stores/${slug}/admin`); }

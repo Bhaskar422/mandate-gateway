@@ -7,6 +7,7 @@ import { storeCreds } from "@/lib/config";
 import type { Dispute } from "@/lib/paypal";
 
 // One endpoint for the gateway's PayPal app and the demo stores' apps. Each app has its own webhook id.
+export const maxDuration = 60;
 export async function POST(req: Request) {
   const raw = await req.text();
   let event: { id: string; event_type: string; resource: Record<string, unknown> };
@@ -22,7 +23,7 @@ export async function POST(req: Request) {
   const fresh = await db.insert(schema.webhookEvents).values({ id: event.id, eventType: event.event_type, resource: event.resource, verified }).onConflictDoNothing().returning();
   if (fresh.length) {
     await applyWebhook(event.event_type, event.resource);
-    if (store && event.event_type === "CUSTOMER.DISPUTE.CREATED") await handleDispute(store, event.resource as unknown as Dispute).catch((e) => console.error("dispute handling failed:", e));
+    if (store && (event.event_type === "CUSTOMER.DISPUTE.CREATED" || event.event_type === "CUSTOMER.DISPUTE.UPDATED")) await handleDispute(store, event.resource as unknown as Dispute).catch((e) => console.error("dispute handling failed:", e));
   }
   return Response.json({ ok: true });
 }
