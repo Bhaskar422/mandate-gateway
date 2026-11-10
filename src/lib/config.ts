@@ -1,4 +1,6 @@
-export const appUrl = () => (process.env.APP_URL ?? "http://localhost:3000").replace(/\/$/, "");
+/** Public base URL. On Vercel it defaults to the project's production domain. */
+export const appUrl = () =>
+  (process.env.APP_URL ?? (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : "http://localhost:3000")).replace(/\/$/, "");
 export const llmModel = () => process.env.LLM_MODEL ?? "claude-opus-5-5";
 export const llmConfigured = () => !!(process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN);
 
