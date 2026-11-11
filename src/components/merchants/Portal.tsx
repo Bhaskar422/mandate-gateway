@@ -4,12 +4,15 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { registerMerchantAction, verifyMerchantAction } from "@/app/actions";
+import type { MerchantInsights } from "@/lib/merchant-insights";
 import type { MerchantView } from "@/lib/views";
+import { plural } from "../format";
 import { Badge } from "../ui/Badge";
 import Banner, { ErrorText } from "../ui/Banner";
 import Button from "../ui/Button";
 import { CodeBlock } from "../ui/Copy";
 import { useAction } from "../useAction";
+import Insights from "./Insights";
 import { TRUST, TRUST_ORDER } from "./trust";
 
 /** The file a store publishes to prove it owns its site and to tell the gateway where to pay it. */
@@ -46,7 +49,7 @@ function ProveOwnership({ merchantId, baseUrl, token, wellKnownUrl, appUrl, onPr
   );
 }
 
-function MyStore({ m, appUrl, onChange }: { m: MerchantView; appUrl: string; onChange: () => void }) {
+function MyStore({ m, insights, appUrl, onChange }: { m: MerchantView; insights?: MerchantInsights; appUrl: string; onChange: () => void }) {
   const t = TRUST[m.trust];
   return (
     <li className="card p-5 sm:p-6">
@@ -70,12 +73,20 @@ function MyStore({ m, appUrl, onChange }: { m: MerchantView; appUrl: string; onC
       ) : (
         <p className="mt-3 text-base text-ink-2">Your store is verified. Mandates that say “known merchants only” allow it.</p>
       )}
+      {insights && m.trust !== "pending" && (
+        <details className="mt-4 border-t border-line pt-4">
+          <summary className="link cursor-pointer text-base font-semibold">
+            Agent sales: {insights.requests.total === 0 ? "no agent requests yet" : `${plural(insights.requests.total, "agent request")}, ${plural(insights.requests.paid, "paid order")}, ${insights.requests.blocked} blocked`}
+          </summary>
+          <div className="mt-4"><Insights insights={insights} /></div>
+        </details>
+      )}
     </li>
   );
 }
 
 /** Where a store joins the gateway. Separate from the shopper's dashboard: a merchant needs no PayPal link or mandate here. */
-export default function MerchantPortal({ merchants, appUrl }: { merchants: MerchantView[]; appUrl: string }) {
+export default function MerchantPortal({ merchants, insights = {}, appUrl }: { merchants: MerchantView[]; insights?: Record<string, MerchantInsights>; appUrl: string }) {
   const router = useRouter();
   const register = useAction(registerMerchantAction);
   const [url, setUrl] = useState("");
@@ -89,7 +100,8 @@ export default function MerchantPortal({ merchants, appUrl }: { merchants: Merch
         <p className="eyebrow">For merchants</p>
         <h1 className="display mt-1 text-3xl text-ink">Let shopping agents pay your store</h1>
         <p className="mt-2 text-lg text-ink-2">
-          Mandate pays stores from a shopper&apos;s PayPal account when the shopper&apos;s agent asks and their rules allow it. To be paid, your store tells the gateway who it is. That takes two steps and no account.
+          Shopping agents pay your store from the shopper&apos;s PayPal account, and only inside rules the shopper set. You receive a signed record of every order, and you can answer refund requests and PayPal disputes with that record.
+          To be paid, your store tells the gateway who it is. That takes two steps and no account.
         </p>
       </header>
 
@@ -133,13 +145,13 @@ export default function MerchantPortal({ merchants, appUrl }: { merchants: Merch
 
       <section aria-label="Stores registered from this browser">
         <h2 className="mb-1 text-lg font-semibold text-ink">Stores registered from this browser</h2>
-        <p className="mb-3 text-sm text-ink-3">The ownership token is shown only in the browser that registered the store.</p>
+        <p className="mb-3 text-sm text-ink-3">The ownership token and a store&apos;s agent sales are shown only in the browser that registered the store.</p>
         {notice?.kind === "proved" && (
           <Banner tone="ok" role="status" className="mb-3" icon={<CircleCheck size={18} aria-hidden />} title="Ownership proved">{notice.text}</Banner>
         )}
         {mine.length === 0
           ? <p className="card p-4 text-base text-ink-2">None yet. Register an address above to get your ownership token.</p>
-          : <ul className="space-y-3">{mine.map((m) => <MyStore key={m.id} m={m} appUrl={appUrl} onChange={() => { setNotice({ kind: "proved", text: "The gateway read the file from your site, matched the token and saved your PayPal payee. Your store is now registered." }); router.refresh(); }} />)}</ul>}
+          : <ul className="space-y-3">{mine.map((m) => <MyStore key={m.id} m={m} insights={insights[m.id]} appUrl={appUrl} onChange={() => { setNotice({ kind: "proved", text: "The gateway read the file from your site, matched the token and saved your PayPal payee. Your store is now registered." }); router.refresh(); }} />)}</ul>}
       </section>
     </>
   );
