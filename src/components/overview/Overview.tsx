@@ -1,6 +1,7 @@
 "use client";
 import { ArrowRight, Ban, CircleCheck, Hand, PauseCircle, ShieldAlert, Wallet } from "lucide-react";
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import { useAccount } from "../AccountProvider";
 import { checkFailed, isAutoPause, money, plural } from "../format";
 import PurchaseCard from "../purchases/PurchaseCard";
@@ -8,7 +9,8 @@ import Banner from "../ui/Banner";
 import { EmptyState, PageHeader, Section } from "../ui/Layout";
 import Meter from "../ui/Meter";
 import ActivityChart from "./ActivityChart";
-import { SetupChecklist, Welcome } from "./Onboarding";
+import FirstRun, { needsFirstRun } from "./FirstRun";
+import { SetupChecklist } from "./Onboarding";
 
 function Stat({ icon, label, value, note, tone, href }: { icon: React.ReactNode; label: string; value: string; note: string; tone: string; href: string }) {
   return (
@@ -20,11 +22,14 @@ function Stat({ icon, label, value, note, tone, href }: { icon: React.ReactNode;
   );
 }
 
-/** The home page. A new account sees the welcome; an active one sees what needs it first, then the numbers. */
+/** The home page. A new account sees the guided first run; an active one sees what needs it first, then the numbers. */
 export default function Overview({ notice }: { notice: { kind: string; detail: string | null } | null }) {
   const { state } = useAccount();
   const { stats } = state;
-  const fresh = !state.paypal && state.mandates.length === 0 && state.agents.length === 0 && state.purchases.length === 0;
+  // The guided first run stays up after its last step is done, so the visitor sees the result where they asked for it.
+  const firstRun = needsFirstRun(state);
+  const [guided, setGuided] = useState(firstRun);
+  useEffect(() => { if (firstRun) setGuided(true); }, [firstRun]);
 
   const paypalNotice = notice && (
     <Banner className="mb-5" role="status" tone={notice.kind === "linked" || notice.kind === "restored" ? "ok" : notice.kind === "cancelled" ? "neutral" : "bad"} icon={<Wallet size={17} aria-hidden />}
@@ -32,7 +37,7 @@ export default function Overview({ notice }: { notice: { kind: string; detail: s
       {notice.kind === "restored" ? "That PayPal account already had a Mandate account, so this browser is now signed in to it. Your mandates, agents and history are as you left them." : notice.kind === "linked" ? "Your agents can now pay within your mandates." : notice.kind === "cancelled" ? "Nothing was saved. You can try again whenever you like." : notice.detail ?? "PayPal returned an error. Try again."}
     </Banner>
   );
-  if (fresh) return <>{paypalNotice}<Welcome /></>;
+  if (guided) return <>{paypalNotice}<FirstRun onFinish={() => setGuided(false)} /></>;
 
   const approvals = state.purchases.filter((p) => p.status === "pending_approval");
   const offers = state.purchases.filter((p) => p.case?.status === "offer_pending");

@@ -1,5 +1,5 @@
 "use client";
-import { ArrowRight, Bot, Check, FileSignature, ScrollText, ShieldCheck } from "lucide-react";
+import { ArrowRight, Check } from "lucide-react";
 import Link from "next/link";
 import { useAccount } from "../AccountProvider";
 import DemoWalletButton from "../DemoWalletButton";
@@ -49,48 +49,6 @@ function Steps() {
         </li>
       ))}
     </ol>
-  );
-}
-
-/** First-run screen: what the product is, in one view, and the three steps to a working setup. */
-export function Welcome() {
-  const how = [
-    { icon: <FileSignature size={18} aria-hidden />, title: "You set the rules", body: "“Up to $150 on running shoes, known stores only, ask me above $100.”" },
-    { icon: <Bot size={18} aria-hidden />, title: "Your agent asks to buy", body: "It sends the gateway a product page. It never holds a card or your PayPal login." },
-    { icon: <ShieldCheck size={18} aria-hidden />, title: "The gateway decides", body: "It reads the store's page itself, then pays, asks you first, or blocks it and says why." },
-    { icon: <ScrollText size={18} aria-hidden />, title: "Every step is signed", body: "The record settles what happens next: a refund for you, or evidence the store can take to PayPal." },
-  ];
-  return (
-    <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)] lg:gap-12">
-      <div>
-        <p className="eyebrow">Welcome</p>
-        <h1 className="display mt-2 text-3xl text-ink sm:text-[2.6rem] sm:leading-[1.1]">Every agent purchase comes with proof. <em className="text-brand-ink">You keep the final say.</em></h1>
-        <p className="mt-4 max-w-xl text-lg text-ink-2">
-          Mandate sits between any AI shopping agent and your PayPal account. Agents can only ask. The gateway checks every request against rules you set and signs a record of every step. If something goes wrong, you get your refund on that record, and the store answers a dispute with it.
-        </p>
-        <ol className="mt-7 space-y-4">
-          {how.map((h, i) => (
-            <li key={h.title} className="flex gap-3.5">
-              <span className="relative flex size-9 shrink-0 items-center justify-center rounded-full border border-line-strong bg-surface text-ink-2">
-                {h.icon}
-                {i < how.length - 1 && <span className="absolute left-1/2 top-full h-4 w-px bg-line-strong" aria-hidden />}
-              </span>
-              <div>
-                <p className="font-semibold text-ink">{h.title}</p>
-                <p className="text-base text-ink-2">{h.body}</p>
-              </div>
-            </li>
-          ))}
-        </ol>
-      </div>
-      <section aria-label="Get set up">
-        <h2 className="mb-3 text-lg font-semibold text-ink">Get set up in three steps</h2>
-        <Steps />
-        <p className="mt-4 text-sm text-ink-3">
-          Just looking? Browse the <Link className="link" href="/stores/stride">demo stores</Link>, read how <Link className="link" href="/developers">agents connect</Link>, or <Link className="link" href="/verify">check a signed record</Link>.
-        </p>
-      </section>
-    </div>
   );
 }
 
