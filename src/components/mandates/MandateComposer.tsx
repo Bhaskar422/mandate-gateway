@@ -28,8 +28,8 @@ export default function MandateComposer({ replace, onClose, onConfirmed }: { rep
   const compile = useAction(compileMandateAction), confirm = useAction(confirmMandateAction);
   const [text, setText] = useState(replace?.sourceText ?? "");
   const [draft, setDraft] = useState<{ rules: MandateRules; warnings: string[]; questions: MandateQuestion[]; examples: MandateExample[] } | null>(null);
-  // A new mandate starts in the guided builder; replacing one starts from its own words.
-  const [mode, setMode] = useState<"build" | "write">(replace ? "write" : "build");
+  // Writing is the default: the sentence is what gets compiled, checked and signed. The builder is one tab away.
+  const [mode, setMode] = useState<"build" | "write">("write");
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [name, setName] = useState(replace?.name ?? "");
   const [scoped, setScoped] = useState(!!replace?.agentIds?.length);
@@ -68,7 +68,7 @@ export default function MandateComposer({ replace, onClose, onConfirmed }: { rep
         <form onSubmit={toRules}>
           {!state.llm && <Banner tone="warn" className="mb-4" icon={<TriangleAlert size={17} aria-hidden />} title="No model is configured on this gateway">Turning text into rules needs one, so this step may fail.</Banner>}
           <div role="tablist" aria-label="How to write the mandate" className="mb-5 inline-flex rounded-lg border border-line bg-raised p-1">
-            {([["build", "Pick from choices"], ["write", "Write it myself"]] as const).map(([id, label]) => (
+            {([["write", "Write it myself"], ["build", "Pick from choices"]] as const).map(([id, label]) => (
               <button key={id} type="button" role="tab" aria-selected={mode === id} disabled={compile.pending} onClick={() => setMode(id)}
                 className={`rounded-md px-3 py-1.5 text-sm font-semibold ${mode === id ? "bg-surface text-ink shadow-sm" : "text-ink-3 hover:text-ink"}`}>{label}</button>
             ))}
