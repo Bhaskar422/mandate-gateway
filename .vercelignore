@@ -1,0 +1,10 @@
+# Local-only folders that a deploy from this machine must not upload. Deploys from GitHub are not affected.
+agent-tests
+.claude
+.pgdata
+.next
+.next-build
+.next-agent-tests
+docs
+scripts
+tests
