@@ -24,7 +24,7 @@ PRICES = {
 DEFAULT_MODEL = {
     "anthropic": "claude-haiku-5-5",
     "openai": os.environ.get("AGENT_TESTS_OPENAI_MODEL", "gpt-5-mini"),
-    "google": os.environ.get("AGENT_TESTS_GOOGLE_MODEL", "gemini-2.5-flash"),
+    "google": os.environ.get("AGENT_TESTS_GOOGLE_MODEL", "gemini-flash-lite-latest"),
 }
 
 

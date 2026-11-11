@@ -12,7 +12,7 @@ const opt = (name: string) => { const i = args.lastIndexOf(`--${name}`); return 
 const listOpt = (name: string) => opt(name)?.split(",").map((s) => s.trim()).filter(Boolean);
 const GATEWAY = (process.env.GATEWAY_URL ?? "http://localhost:3100").replace(/\/$/, "");
 const DEFAULT_MODEL: Record<Framework["provider"], string> = {
-  anthropic: "claude-haiku-5-5", openai: process.env.AGENT_TESTS_OPENAI_MODEL ?? "gpt-5-mini", google: process.env.AGENT_TESTS_GOOGLE_MODEL ?? "gemini-2.5-flash" };
+  anthropic: "claude-haiku-5-5", openai: process.env.AGENT_TESTS_OPENAI_MODEL ?? "gpt-5-mini", google: process.env.AGENT_TESTS_GOOGLE_MODEL ?? "gemini-flash-lite-latest" };
 const providerOf = (model: string): Framework["provider"] => (model.startsWith("claude") ? "anthropic" : model.startsWith("gemini") ? "google" : "openai");
 /** --model applies to the frameworks that can drive it; the others keep their provider's default. */
 const modelFor = (fw: Framework, requested?: string) => (requested && providerOf(requested) === fw.provider ? requested : DEFAULT_MODEL[fw.provider]);
