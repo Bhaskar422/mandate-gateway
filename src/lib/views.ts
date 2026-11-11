@@ -1,5 +1,6 @@
 // Read models for the web app. Pages and client components take their data from here and nowhere else.
 import { desc, eq } from "drizzle-orm";
+import { assistantDailyLimit, assistantRemaining } from "./assistant";
 import { appUrl, llmConfigured, paypalSimulated } from "./config";
 import { db, schema } from "./db";
 import { committedSpend, ensureSeed, getUser } from "./gateway";
@@ -10,7 +11,7 @@ const iso = (d: Date | null | undefined) => d?.toISOString() ?? null;
 
 export async function dashboardState(userId: string) {
   await ensureSeed();
-  const [user, [link], mandateRows, agentRows, merchantRows, rows, caseRows, merchantList] = await Promise.all([
+  const [user, [link], mandateRows, agentRows, merchantRows, rows, caseRows, merchantList, assistantLeft] = await Promise.all([
     getUser(userId),
     db.select().from(schema.paypalLinks).where(eq(schema.paypalLinks.userId, userId)),
     db.select().from(schema.mandates).where(eq(schema.mandates.userId, userId)).orderBy(desc(schema.mandates.confirmedAt)),
@@ -19,6 +20,7 @@ export async function dashboardState(userId: string) {
     db.select().from(schema.purchases).where(eq(schema.purchases.userId, userId)).orderBy(desc(schema.purchases.createdAt)).limit(200),
     db.select().from(schema.cases).where(eq(schema.cases.userId, userId)).orderBy(desc(schema.cases.createdAt)),
     listMerchants(userId),
+    assistantRemaining(userId),
   ]);
   const agentName = (id: string | null) => agentRows.find((a) => a.id === id)?.name ?? null;
   const merchantName = (id: string | null) => merchantRows.find((m) => m.id === id)?.name ?? null;
@@ -37,7 +39,7 @@ export async function dashboardState(userId: string) {
   const agents = agentRows.map((a) => {
     const mine = rows.filter((p) => p.agentId === a.id);
     return {
-      id: a.id, name: a.name, keyPrefix: a.keyPrefix, createdAt: a.createdAt.toISOString(), lastSeenAt: iso(a.lastSeenAt),
+      id: a.id, name: a.name, keyPrefix: a.keyPrefix, builtIn: a.kind === "assistant", createdAt: a.createdAt.toISOString(), lastSeenAt: iso(a.lastSeenAt),
       status: a.revokedAt ? ("revoked" as const) : a.pausedAt ? ("paused" as const) : ("active" as const), pauseReason: a.pauseReason,
       stats: { requests: mine.length, paid: mine.filter((p) => ["captured", "refunded", "partially_refunded", "refund_requested", "disputed"].includes(p.status)).length,
         blocked: mine.filter((p) => p.status === "blocked").length, spentCents: mine.filter((p) => ["captured", "partially_refunded", "disputed", "refund_requested"].includes(p.status)).reduce((s, p) => s + p.amountCents - p.refundedCents, 0) },
@@ -79,6 +81,7 @@ export async function dashboardState(userId: string) {
 
   return {
     appUrl: appUrl(), simulated: paypalSimulated(), llm: llmConfigured(),
+    assistant: { remaining: assistantLeft, dailyLimit: assistantDailyLimit() },
     account: { frozen: !!user?.frozenAt, frozenAt: iso(user?.frozenAt), settings: { autoAcceptRefundPercent: user?.settings?.autoAcceptRefundPercent ?? 100, autoAcceptReplacement: !!user?.settings?.autoAcceptReplacement, notifyUrl: user?.settings?.notifyUrl ?? null } },
     paypal: link?.status === "active" ? { email: link.payerEmail } : null,
     mandates,

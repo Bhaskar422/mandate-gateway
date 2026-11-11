@@ -15,6 +15,26 @@ export const mcpConfig = (appUrl: string, key: string) => JSON.stringify({
 
 export const mcpCommand = (appUrl: string, key: string) => `npx -y mcp-remote ${appUrl}/api/mcp --header "Authorization: Bearer ${key}"`;
 
+/** Claude Code: one command per server. */
+export const claudeCodeCommands = (appUrl: string, key: string) => [
+  `claude mcp add --transport http mandate ${appUrl}/api/mcp --header "Authorization: Bearer ${key}"`,
+  ...STORES.map((s) => `claude mcp add --transport http ${s.slug}-store ${appUrl}/stores/${s.slug}/mcp`),
+].join("\n");
+
+/** Cursor's install link: the server name plus its mcp.json entry, base64-encoded. */
+const cursorLink = (name: string, config: object) => `cursor://anysphere.cursor-deeplink/mcp/install?name=${encodeURIComponent(name)}&config=${encodeURIComponent(btoa(JSON.stringify(config)))}`;
+export const cursorLinks = (appUrl: string, key: string) => [
+  { label: "Add the Mandate gateway to Cursor", href: cursorLink("mandate", { url: `${appUrl}/api/mcp`, headers: { Authorization: `Bearer ${key}` } }) },
+  ...STORES.map((s) => ({ label: `Add ${s.name}'s catalogue`, href: cursorLink(`${s.slug}-store`, { url: `${appUrl}/stores/${s.slug}/mcp` }) })),
+];
+/** .cursor/mcp.json, for people who would rather paste. */
+export const cursorConfig = (appUrl: string, key: string) => JSON.stringify({
+  mcpServers: {
+    mandate: { url: `${appUrl}/api/mcp`, headers: { Authorization: `Bearer ${key}` } },
+    ...Object.fromEntries(STORES.map((s) => [`${s.slug}-store`, { url: `${appUrl}/stores/${s.slug}/mcp` }])),
+  },
+}, null, 2);
+
 export const storeServers = (appUrl: string) => STORES.map((s) => ({ name: s.name, url: `${appUrl}/stores/${s.slug}/mcp` }));
 
 export const curlPurchase = (appUrl: string, key: string) => `curl -X POST ${appUrl}/api/v1/purchases \\

@@ -8,14 +8,14 @@ export function useSetup() {
   const { state } = useAccount();
   const steps = [
     { key: "paypal", done: !!state.paypal, title: "Link your PayPal account",
-      body: "You log in at PayPal once and it saves your wallet for this gateway. Agents never see your PayPal login or any payment details.",
-      done_text: state.paypal ? `Linked${state.paypal.email ? ` as ${state.paypal.email}` : ""}.` : "", cta: "Link PayPal", href: "/api/paypal/link", external: true },
+      body: "You log in at PayPal once and it saves your wallet for this gateway. Agents never see your PayPal login or any payment details. Your PayPal account is also how you sign in: link the same one on another browser and this account comes back.",
+      done_text: state.paypal ? `Linked${state.paypal.email ? ` as ${state.paypal.email}` : ""}.` : "", cta: "Link PayPal", href: "/api/paypal/link", external: true, alt: null as { label: string; href: string } | null },
     { key: "mandate", done: state.mandates.length > 0, title: "Write a mandate",
       body: "Say in plain English what an agent may buy and how much it may spend. You review the exact rules before they take effect.",
-      done_text: `${state.mandates.length} active.`, cta: "Write a mandate", href: "/mandates?new=1", external: false },
-    { key: "agent", done: state.agents.some((a) => a.status !== "revoked"), title: "Connect an agent",
-      body: "Give Claude, ChatGPT or your own agent a key to this gateway. It can then ask the gateway to pay, and only that.",
-      done_text: `${state.agents.filter((a) => a.status !== "revoked").length} connected.`, cta: "Connect an agent", href: "/agents?new=1", external: false },
+      done_text: `${state.mandates.length} active.`, cta: "Write a mandate", href: "/mandates?new=1", external: false, alt: null },
+    { key: "agent", done: state.agents.some((a) => a.status !== "revoked"), title: "Connect an agent, or use the built-in one",
+      body: "Give Claude, Cursor or your own agent a key to this gateway. It can then ask the gateway to pay, and only that. To try it with no setup, use the shopping assistant in this dashboard.",
+      done_text: `${state.agents.filter((a) => a.status !== "revoked").length} connected.`, cta: "Connect an agent", href: "/agents?new=1", external: false, alt: { label: "Use the built-in assistant", href: "/assistant" } },
   ];
   return { steps, doneCount: steps.filter((s) => s.done).length, complete: steps.every((s) => s.done) };
 }
@@ -34,10 +34,11 @@ function Steps() {
             <h3 className="text-lg font-semibold text-ink">{s.title}</h3>
             <p className="mt-0.5 text-base text-ink-2">{s.done ? s.done_text : s.body}</p>
             {!s.done && (
-              <div className="mt-3">
+              <div className="mt-3 flex flex-wrap gap-2">
                 {s.external
                   ? <a href={s.href} className={`btn ${s.key === next ? "btn-primary" : "btn-secondary"}`}>{s.cta}<ArrowRight size={15} aria-hidden /></a>
                   : <Link href={s.href} className={`btn ${s.key === next ? "btn-primary" : "btn-secondary"}`}>{s.cta}<ArrowRight size={15} aria-hidden /></Link>}
+                {s.alt && <Link href={s.alt.href} className="btn btn-secondary">{s.alt.label}</Link>}
               </div>
             )}
           </div>

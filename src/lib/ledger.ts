@@ -5,7 +5,7 @@ import { canonical, sha256 } from "./ids";
 
 export const GENESIS = "0".repeat(64);
 export type LedgerType =
-  | "mandate.confirmed" | "mandate.revoked" | "paypal.linked" | "purchase.requested" | "purchase.decided"
+  | "mandate.confirmed" | "mandate.revoked" | "paypal.linked" | "paypal.signed_in" | "purchase.requested" | "purchase.decided"
   | "purchase.approved_by_user" | "purchase.declined_by_user" | "payment.captured" | "payment.failed"
   | "problem.reported" | "refund.requested" | "refund.completed" | "merchant.declined" | "dispute.opened" | "dispute.evidence_submitted" | "webhook.received"
   | "settlement.offer" | "settlement.counter" | "settlement.accepted" | "settlement.declined"

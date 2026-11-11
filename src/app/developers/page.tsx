@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { curlPurchase, KEY_PLACEHOLDER, mcpCommand, mcpConfig, storeServers } from "@/components/agents/snippets";
+import { claudeCodeCommands, curlPurchase, KEY_PLACEHOLDER, mcpCommand, mcpConfig, storeServers } from "@/components/agents/snippets";
 import ResultsMatrix from "@/components/public/ResultsMatrix";
 import PublicShell from "@/components/shell/PublicShell";
 import { Badge } from "@/components/ui/Badge";
@@ -73,6 +73,7 @@ export default function DevelopersPage() {
           </p>
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             <CodeBlock label="Claude Desktop config" code={mcpConfig(base, KEY_PLACEHOLDER)} />
+            <CodeBlock label="Claude Code" code={claudeCodeCommands(base, KEY_PLACEHOLDER)} wrap />
             <div className="min-w-0 space-y-4">
               <CodeBlock label="Any MCP client that runs a command" code={mcpCommand(base, KEY_PLACEHOLDER)} wrap />
               <CodeBlock label="Demo store catalogues (no key)" code={storeServers(base).map((s) => `${s.url}   # ${s.name}`).join("\n")} />

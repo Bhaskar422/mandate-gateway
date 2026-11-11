@@ -1,5 +1,5 @@
 "use client";
-import { Bot, Code2, FileCheck2, FlaskConical, LayoutDashboard, Menu, ReceiptText, ScrollText, Settings, ShoppingBag, Store, X } from "lucide-react";
+import { Bot, Code2, FileCheck2, FlaskConical, LayoutDashboard, Menu, ReceiptText, ScrollText, Settings, ShoppingBag, Sparkles, Store, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -39,6 +39,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const waiting = state.stats.pendingCount + state.stats.offersWaiting;
   const main: Item[] = [
     { href: "/", label: "Overview", icon: <LayoutDashboard size={17} aria-hidden /> },
+    { href: "/assistant", label: "Assistant", icon: <Sparkles size={17} aria-hidden /> },
     { href: "/activity", label: "Activity", icon: <ReceiptText size={17} aria-hidden />, badge: waiting },
     { href: "/mandates", label: "Mandates", icon: <ScrollText size={17} aria-hidden /> },
     { href: "/agents", label: "Agents", icon: <Bot size={17} aria-hidden /> },

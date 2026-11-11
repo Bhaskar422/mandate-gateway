@@ -2,6 +2,7 @@ import { cookies } from "next/headers";
 import { db, schema } from "./db";
 
 export const SESSION_COOKIE = "mandate_uid";
+export const sessionCookieOptions = (secure: boolean) => ({ httpOnly: true, sameSite: "lax" as const, secure, maxAge: 60 * 60 * 24 * 365, path: "/" });
 /** The cookie is an unguessable id set by middleware. The user row is created on first use. */
 export async function currentUserId(): Promise<string> {
   const id = (await cookies()).get(SESSION_COOKIE)?.value;

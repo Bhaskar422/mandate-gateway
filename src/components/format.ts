@@ -107,6 +107,7 @@ export const LEDGER: Record<string, { title: string; tone: Tone }> = {
   "mandate.confirmed": { title: "Mandate confirmed", tone: "brand" },
   "mandate.revoked": { title: "Mandate revoked", tone: "neutral" },
   "paypal.linked": { title: "PayPal linked", tone: "ok" },
+  "paypal.signed_in": { title: "Signed in with PayPal on a new browser", tone: "neutral" },
   "agent.paused": { title: "Agent paused", tone: "warn" },
   "agent.resumed": { title: "Agent resumed", tone: "ok" },
   "agent.revoked": { title: "Agent revoked", tone: "bad" },

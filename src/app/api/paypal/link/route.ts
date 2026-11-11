@@ -10,7 +10,8 @@ export async function GET() {
   try {
     const t = await createSetupToken(`${appUrl()}/api/paypal/return`, `${appUrl()}/?paypal=cancelled`);
     await db.insert(schema.paypalLinks).values({ userId, setupTokenId: t.id, status: "pending" })
-      .onConflictDoUpdate({ target: schema.paypalLinks.userId, set: { setupTokenId: t.id, status: "pending", vaultId: null } });
+      // A wallet already linked stays in use until the new one is approved.
+      .onConflictDoUpdate({ target: schema.paypalLinks.userId, set: { setupTokenId: t.id } });
     target = t.approveUrl;
   } catch (e) { console.error(e); target = `${appUrl()}/?paypal=error&detail=${encodeURIComponent(e instanceof Error ? e.message : "error")}`; }
   redirect(target);

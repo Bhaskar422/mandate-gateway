@@ -34,7 +34,7 @@ function AgentCard({ a, onKey }: { a: AgentView; onKey: (r: Reveal) => void }) {
           <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-sunken text-ink-2"><Bot size={19} aria-hidden /></span>
           <div className="min-w-0">
             <h3 className="text-lg font-semibold text-ink [overflow-wrap:anywhere]">{a.name}</h3>
-            <p className="text-sm text-ink-3"><span className="code">{a.keyPrefix}…</span> · {a.lastSeenAt ? <>last seen <LocalTime iso={a.lastSeenAt} format="relative" /></> : "has not connected yet"}</p>
+            <p className="text-sm text-ink-3">{a.builtIn ? <Link href="/assistant" className="link">Built into this dashboard</Link> : <span className="code">{a.keyPrefix}…</span>} · {a.lastSeenAt ? <>last seen <LocalTime iso={a.lastSeenAt} format="relative" /></> : "has not connected yet"}</p>
           </div>
         </div>
         <Badge tone={s.tone} icon={<span className="tone-fill inline-block size-1.5 rounded-full" aria-hidden />}>{s.label}</Badge>
@@ -65,8 +65,8 @@ function AgentCard({ a, onKey }: { a: AgentView; onKey: (r: Reveal) => void }) {
             ? <Button size="sm" variant={auto ? "primary" : "secondary"} icon={<Play size={13} aria-hidden />} loading={resume.pending} disabled={busy} onClick={() => resume.run(a.id)}>Resume</Button>
             : <Button size="sm" icon={<Pause size={13} aria-hidden />} loading={pause.pending} disabled={busy} onClick={() => pause.run(a.id)}>Pause</Button>}
           <Link href={`/activity?agent=${a.id}`} className="btn btn-secondary btn-sm">Its activity</Link>
-          <ConfirmButton variant="secondary" question="The current key stops working at once. Rotate?" confirmLabel="Rotate key" loading={rotate.pending} icon={<RefreshCw size={13} aria-hidden />}
-            onConfirm={async () => { const r = await rotate.run(a.id); if (r) onKey({ name: a.name, key: r.key, rotated: true }); }}>Rotate key</ConfirmButton>
+          {!a.builtIn && <ConfirmButton variant="secondary" question="The current key stops working at once. Rotate?" confirmLabel="Rotate key" loading={rotate.pending} icon={<RefreshCw size={13} aria-hidden />}
+            onConfirm={async () => { const r = await rotate.run(a.id); if (r) onKey({ name: a.name, key: r.key, rotated: true }); }}>Rotate key</ConfirmButton>}
           <ConfirmButton question="Revoke for good? This cannot be undone." confirmLabel="Revoke" loading={revoke.pending} icon={<Trash2 size={13} aria-hidden />} onConfirm={() => revoke.run(a.id)}>Revoke</ConfirmButton>
         </div>
       )}

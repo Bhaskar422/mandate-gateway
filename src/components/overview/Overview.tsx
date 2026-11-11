@@ -27,9 +27,9 @@ export default function Overview({ notice }: { notice: { kind: string; detail: s
   const fresh = !state.paypal && state.mandates.length === 0 && state.agents.length === 0 && state.purchases.length === 0;
 
   const paypalNotice = notice && (
-    <Banner className="mb-5" role="status" tone={notice.kind === "linked" ? "ok" : notice.kind === "cancelled" ? "neutral" : "bad"} icon={<Wallet size={17} aria-hidden />}
-      title={notice.kind === "linked" ? "PayPal linked" : notice.kind === "cancelled" ? "PayPal linking was cancelled" : "PayPal linking failed"}>
-      {notice.kind === "linked" ? "Your agents can now pay within your mandates." : notice.kind === "cancelled" ? "Nothing was saved. You can try again whenever you like." : notice.detail ?? "PayPal returned an error. Try again."}
+    <Banner className="mb-5" role="status" tone={notice.kind === "linked" || notice.kind === "restored" ? "ok" : notice.kind === "cancelled" ? "neutral" : "bad"} icon={<Wallet size={17} aria-hidden />}
+      title={notice.kind === "restored" ? "Welcome back" : notice.kind === "linked" ? "PayPal linked" : notice.kind === "cancelled" ? "PayPal linking was cancelled" : "PayPal linking failed"}>
+      {notice.kind === "restored" ? "That PayPal account already had a Mandate account, so this browser is now signed in to it. Your mandates, agents and history are as you left them." : notice.kind === "linked" ? "Your agents can now pay within your mandates." : notice.kind === "cancelled" ? "Nothing was saved. You can try again whenever you like." : notice.detail ?? "PayPal returned an error. Try again."}
     </Banner>
   );
   if (fresh) return <>{paypalNotice}<Welcome /></>;

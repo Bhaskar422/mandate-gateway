@@ -1,7 +1,7 @@
 "use client";
-import { BellRing, CircleCheck, Wallet } from "lucide-react";
+import { BellRing, CircleCheck, LogOut, Wallet } from "lucide-react";
 import { useEffect, useState } from "react";
-import { updateSettingsAction } from "@/app/actions";
+import { signOutAction, updateSettingsAction } from "@/app/actions";
 import { useAccount } from "../AccountProvider";
 import { money } from "../format";
 import LocalTime from "../LocalTime";
@@ -10,6 +10,7 @@ import ThemeToggle from "../shell/ThemeToggle";
 import { Badge } from "../ui/Badge";
 import { ErrorText } from "../ui/Banner";
 import Button from "../ui/Button";
+import ConfirmButton from "../ui/ConfirmButton";
 import { PageHeader, Section } from "../ui/Layout";
 import { useAction } from "../useAction";
 
@@ -97,6 +98,26 @@ function Alerts() {
   );
 }
 
+function SignOut() {
+  const { state } = useAccount();
+  const out = useAction(signOutAction);
+  return (
+    <div className="card flex flex-wrap items-center justify-between gap-4 p-5 sm:p-6">
+      <div className="max-w-xl">
+        <p className="text-lg font-semibold text-ink">Sign out of this browser</p>
+        <p className="text-sm text-ink-3">
+          {state.paypal
+            ? "Your account stays as it is. To come back, on this or any browser, link the same PayPal account and you are signed in to it again."
+            : "You have not linked PayPal, so nothing identifies this account yet. If you sign out now, this dashboard cannot be recovered."}
+        </p>
+        <ErrorText>{out.error}</ErrorText>
+      </div>
+      <ConfirmButton variant="secondary" question={state.paypal ? "Sign out of this browser?" : "This account cannot be recovered. Sign out anyway?"} confirmLabel="Sign out" loading={out.pending} icon={<LogOut size={14} aria-hidden />}
+        onConfirm={async () => { if (await out.run()) window.location.assign("/"); }}>Sign out</ConfirmButton>
+    </div>
+  );
+}
+
 /** Account-wide choices: settlement rules, alerts, the PayPal link, the kill switch and the theme. */
 export default function Settings() {
   const { state } = useAccount();
@@ -123,6 +144,8 @@ export default function Settings() {
             <a href="/api/paypal/link" className={`btn ${state.paypal ? "btn-secondary" : "btn-primary"}`}>{state.paypal ? "Link a different account" : "Link PayPal"}</a>
           </div>
         </Section>
+
+        <Section title="Account" hint="Your PayPal account is your sign-in. There is no separate password."><SignOut /></Section>
 
         <Section title="Kill switch">
           <div className="card flex flex-wrap items-center justify-between gap-4 p-5 sm:p-6">

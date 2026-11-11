@@ -1,13 +1,15 @@
 "use server";
 // Every mutation the web app can make. Each one resolves the signed-in user itself; none trusts a user id from the client.
 import { revalidatePath } from "next/cache";
+import { cookies } from "next/headers";
+import { restartAssistant } from "@/lib/assistant";
 import type { UserSettings } from "@/lib/db/schema";
 import { answerOffer, confirmMandate, createAgent, decideApproval, decideByToken, pauseAgent, reportProblem, resolveMerchantNames, resumeAgent, revokeAgent, revokeMandate, rotateAgentKey, setFrozen, updateSettings } from "@/lib/gateway";
 import { publicKeyPem, verifyBundle, type LedgerRow } from "@/lib/ledger";
 import { compileMandate } from "@/lib/llm";
 import { registerMerchant, verifyMerchantDomain } from "@/lib/merchants";
 import { MandateRulesSchema, type MandateRules } from "@/lib/rules";
-import { currentUserId } from "@/lib/session";
+import { currentUserId, SESSION_COOKIE } from "@/lib/session";
 import { publishVerificationToken, sandboxRuling, shipOrder, syncDisputes } from "@/lib/stores/merchant";
 
 type R<T = object> = ({ ok: true } & T) | { ok: false; error: string };
@@ -59,6 +61,11 @@ export async function rotateAgentKeyAction(agentId: string): Promise<R<{ key: st
 /** The kill switch. */
 export async function setFrozenAction(frozen: boolean): Promise<R> { try { await setFrozen(await currentUserId(), frozen); return done(); } catch (e) { return fail(e); } }
 export async function updateSettingsAction(patch: UserSettings): Promise<R> { try { await updateSettings(await currentUserId(), patch); return done(); } catch (e) { return fail(e); } }
+
+/** Forget this browser's session. The account itself stays, and linking the same PayPal account brings it back. */
+export async function signOutAction(): Promise<R> { try { (await cookies()).delete(SESSION_COOKIE); return done(); } catch (e) { return fail(e); } }
+/** Start a new built-in shopping assistant after the last one was revoked. */
+export async function restartAssistantAction(): Promise<R> { try { await restartAssistant(await currentUserId()); return done(); } catch (e) { return fail(e); } }
 
 // ---- Purchases --------------------------------------------------------------------------------
 

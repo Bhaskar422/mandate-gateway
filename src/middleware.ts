@@ -11,4 +11,4 @@ export function middleware(req: NextRequest) {
   res.cookies.set("mandate_uid", id, { httpOnly: true, sameSite: "lax", secure: req.nextUrl.protocol === "https:", maxAge: 60 * 60 * 24 * 365, path: "/" });
   return res;
 }
-export const config = { matcher: ["/", "/purchases/:path*", "/activity", "/mandates", "/agents", "/merchants", "/settings", "/api/paypal/:path*", "/api/activity"] };
+export const config = { matcher: ["/", "/purchases/:path*", "/activity", "/mandates", "/agents", "/merchants", "/settings", "/assistant", "/api/paypal/:path*", "/api/activity", "/api/assistant"] };

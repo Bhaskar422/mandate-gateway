@@ -47,6 +47,8 @@ A prompt injection can change what an agent asks for. It cannot raise a limit, c
 - **Safe retries.** `request_purchase` takes an idempotency key, and an identical request made again while the first is in flight or just paid returns the same purchase instead of charging twice.
 - **Approval links.** A purchase that needs approval carries a secret link the agent can hand to the user, who approves or declines from their phone without opening the dashboard.
 - **Notifications.** The user can give one webhook (Slack, Discord, ntfy or their own) that hears about approvals needed, blocked purchases, paused agents and merchant offers.
+- **Built-in shopping assistant.** A chat in the dashboard that shops at the demo stores, for trying the gateway with no setup. It is an ordinary agent: it has its own entry on the Agents page, can be paused or revoked, and buys only through the same functions the MCP server and REST API call. It runs on the gateway's model key, so each user gets a daily message allowance.
+- **Sign-in by PayPal.** There is no separate password. The PayPal account a user links is their identity: linking the same account from another browser signs that browser in to the same dashboard.
 - **Settlement rules.** The user decides what their agent may accept without asking: partial refunds at or above a chosen share of the price, and replacements.
 
 ## For agents
@@ -104,10 +106,10 @@ For one purchase the record holds the mandate text and rules hash, the user's re
 
 1. Open https://mandate-gateway.vercel.app and click **Link PayPal**. Log in with a US PayPal sandbox personal account.
 2. Write a mandate, click **Turn into rules**, check them and **Confirm mandate**.
-3. Click **Connect agent** and add the generated config to an MCP client such as Claude Desktop. It adds the gateway and the two demo stores' catalogues.
-4. Ask the agent to buy running shoes, and watch the activity feed.
+3. Open **Assistant** and ask it to buy running shoes. That is the quickest way to see a purchase paid, held for approval or blocked.
+4. To use your own agent instead, click **Connect an agent**. The key screen has ready-made setup for Claude Desktop, Claude Code (one command), Cursor (one click), any other MCP client, and plain REST. It adds the gateway and the demo stores' catalogues.
 
-The demo stores are at `/stores/stride` (verified) and `/stores/kickz` (not verified). Each has a back office at `/stores/<name>/admin` where you can ship an order correctly or ship the wrong item.
+The demo stores are at `/stores/stride` (verified), `/stores/kickz` (not verified) and `/stores/peak` (unknown to the gateway until it registers). Each has a back office at `/stores/<name>/admin` where you can ship an order correctly or ship the wrong item.
 
 **Locally**
 
@@ -140,6 +142,7 @@ The end-to-end script drives the gateway as an agent would. It covers the approv
 - [`src/lib/agent-api.ts`](src/lib/agent-api.ts): what agents see, shared by the MCP server and the REST API ([`src/app/api/v1`](src/app/api/v1))
 - [`src/lib/ledger.ts`](src/lib/ledger.ts): the evidence ledger
 - [`src/lib/paypal.ts`](src/lib/paypal.ts): Vault, Orders, refunds, Disputes, webhook verification
+- [`src/lib/assistant.ts`](src/lib/assistant.ts): the built-in shopping assistant (a Claude tool loop over the agent API)
 - [`src/lib/llm.ts`](src/lib/llm.ts): mandate compiler, product classifier, problem analysis (Claude)
 - [`src/app/api/mcp`](src/app/api/mcp/route.ts): the gateway's MCP server
 - [`src/lib/stores/merchant.ts`](src/lib/stores/merchant.ts): the merchant side: order intake, returns agent, dispute agent
@@ -155,7 +158,8 @@ Stack: Next.js 15, TypeScript, PostgreSQL with Drizzle, the Model Context Protoc
 - **Settlement is rule-based on both sides.** The store's returns policy and the user's acceptance rules are fixed rules; a model only classifies the buyer's complaint.
 - **A PayPal buyer cannot open a dispute through the API.** The buyer opens it in PayPal's Resolution Center; everything after that is automated on the merchant's side.
 - **The sandbox has no human reviewer**, so the final ruling in the dispute demo is triggered with PayPal's sandbox-only `adjudicate` call.
-- **Dashboard sessions are anonymous cookies**, not accounts.
+- **A dashboard is an anonymous cookie until PayPal is linked.** After that the PayPal account identifies it. There is no second factor beyond PayPal's own login.
+- **The built-in assistant calls the gateway's functions in-process** rather than over HTTP with a key. It passes through the same policy checks, but not the network path an outside agent uses.
 - **A merchant fetches the evidence record by presenting the PayPal capture ID**, which is weaker than real merchant authentication.
 
 MIT licensed.

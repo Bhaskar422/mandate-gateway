@@ -57,10 +57,11 @@ export async function createSetupToken(returnUrl: string, cancelUrl: string) {
 }
 
 export async function createPaymentToken(setupTokenId: string) {
-  if (paypalSimulated()) return { vaultId: sim("VAULT"), customerId: sim("CUST"), payerEmail: "simulated-buyer@example.com" };
-  const r = await call<{ id: string; customer?: { id: string }; payment_source?: { paypal?: { email_address?: string } } }>(
+  if (paypalSimulated()) return { vaultId: sim("VAULT"), customerId: sim("CUST"), payerId: null as string | null, payerEmail: "simulated-buyer@example.com" };
+  const r = await call<{ id: string; customer?: { id: string }; payment_source?: { paypal?: { email_address?: string; payer_id?: string; account_id?: string } } }>(
     need(gatewayCreds()), "POST", "/v3/vault/payment-tokens", { payment_source: { token: { id: setupTokenId, type: "SETUP_TOKEN" } } }, { requestId: `pt-${setupTokenId}` });
-  return { vaultId: r.id, customerId: r.customer?.id ?? null, payerEmail: r.payment_source?.paypal?.email_address ?? null };
+  const pp = r.payment_source?.paypal;
+  return { vaultId: r.id, customerId: r.customer?.id ?? null, payerId: pp?.payer_id ?? pp?.account_id ?? null, payerEmail: pp?.email_address ?? null };
 }
 
 // ---- Orders: pay a merchant from the vaulted wallet, with nobody present --------------------

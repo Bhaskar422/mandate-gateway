@@ -1,4 +1,4 @@
-import { boolean, integer, jsonb, pgTable, serial, text, timestamp } from "drizzle-orm/pg-core";
+import { boolean, integer, jsonb, pgTable, primaryKey, serial, text, timestamp } from "drizzle-orm/pg-core";
 import type { Decision } from "../policy";
 import type { MandateRules } from "../rules";
 import type { ProductSnapshot } from "../product";
@@ -28,6 +28,8 @@ export const paypalLinks = pgTable("paypal_links", {
   setupTokenId: text("setup_token_id"),
   vaultId: text("vault_id"),
   customerId: text("customer_id"),
+  /** PayPal's id for the buyer's account. It identifies the user: linking the same PayPal account again restores this account. */
+  payerId: text("payer_id"),
   payerEmail: text("payer_email"),
   status: text("status").$type<"pending" | "active">().notNull().default("pending"),
   createdAt: ts("created_at").notNull().defaultNow(),
@@ -58,6 +60,8 @@ export const agents = pgTable("agents", {
   pausedAt: ts("paused_at"),
   pauseReason: text("pause_reason"),
   lastSeenAt: ts("last_seen_at"),
+  /** "assistant" for the shopping assistant built into the dashboard; null for agents the user connected. */
+  kind: text("kind"),
 });
 
 /** Merchant registry. The payee always comes from here, never from the agent. */
@@ -183,3 +187,10 @@ export const storeSettings = pgTable("store_settings", {
   verificationToken: text("verification_token"),
   updatedAt: ts("updated_at").notNull().defaultNow(),
 });
+
+/** How many messages a user has sent the built-in shopping assistant on a given UTC day. It runs on the gateway's model key, so it is capped. */
+export const assistantUsage = pgTable("assistant_usage", {
+  userId: text("user_id").notNull().references(() => users.id),
+  day: text("day").notNull(),
+  count: integer("count").notNull().default(0),
+}, (t) => [primaryKey({ columns: [t.userId, t.day] })]);
