@@ -1,68 +1,100 @@
 # Devpost write-up
 
-Paste each section into the matching Devpost field. Check the hackathon's rules page for any required disclosure or field this does not cover.
+Paste-ready text for the submission form. Every number here comes from a run recorded in this repository; the sources are listed at the end.
 
-**Project name:** Mandate
+## Form fields
 
-**Tagline:** The trust layer for agent payments: PayPal made agents able to pay, Mandate makes it safe to let them.
+**Project name:** Mandate Gateway
 
-**Links**
+**Elevator pitch** (174 characters; the form allows 200):
+
+```text
+Proof for every agent purchase on PayPal: agents buy inside rules the buyer set, and a signed record of every step gets the buyer a refund and lets the store win the dispute.
+```
+
+**Built with:**
+
+```text
+paypal, next.js, typescript, react, postgresql, neon, vercel, drizzle, model-context-protocol, claude, anthropic, tailwindcss, python, openai, gemini
+```
+
+**Links:**
 
 - Live demo: https://mandate-gateway.vercel.app
-- Code: https://github.com/Bhaskar422/mandate-gateway
-- Video: (add the YouTube link)
-
-**Built with:** PayPal Vault API, PayPal Orders API, PayPal Payments API, PayPal Disputes API, PayPal Webhooks, Model Context Protocol, Claude, Next.js, TypeScript, PostgreSQL, Drizzle, Vercel, Neon
-
----
+- Source: https://github.com/Bhaskar422/mandate-gateway
+- Every test run: https://mandate-gateway.vercel.app/developers/tests
+- Two outside demo stores: https://tidewater-coffee-pi.vercel.app and https://fern-and-field.vercel.app
 
 ## Inspiration
 
-Agents can now find a product and pay for it. What nobody has settled is the part around the payment: who authorised the agent to spend, how that is enforced when the agent reads a hostile web page, and what happens when the wrong thing arrives. PayPal's brand is buyer and seller protection, so that is where we built.
+PayPal made it possible for AI agents to pay. Most of the attention since has gone to stopping an agent from overspending. That matters, but it is half the problem. The other half starts after the money moves: the wrong item arrives, or a buyer disputes a charge, and nobody can show what the buyer actually authorised, what the store's page said, or what the agent was asked to do. We wanted every agent purchase to come with proof that both sides can use.
 
 ## What it does
 
-Mandate is a gateway between any AI shopping agent and a user's PayPal account. The agent never holds payment credentials. It asks the gateway to pay, and the gateway decides.
+Mandate is a gateway between any AI shopping agent and the buyer's PayPal account. The agent never holds payment credentials. It can only ask.
 
-**Authorise.** The user writes a mandate in plain English, such as "up to $150 on running shoes, known merchants only, ask me above $100". A model compiles it into rules and the user confirms them. From then on plain code enforces them.
+**For the buyer**
 
-**Buy.** Any agent connects through MCP. For each purchase the gateway looks up the payee in its own merchant registry, fetches the product page itself to read the real price, and runs the policy. The purchase is then paid from the user's vaulted PayPal wallet, held for a one-tap approval, or blocked with a named reason.
+- Write a mandate in plain English ("up to $150 on running shoes, known stores only, ask me above $100"), or build it from a few choices. A model drafts the rules, code checks them against the buyer's own words, and the gateway asks about anything left open. Before confirming, the buyer sees made-up purchases run through the real checks.
+- Agents connect over MCP or REST. For each request the gateway looks the store up in its own registry, reads the product page itself, checks the mandate in code, then pays from the buyer's saved PayPal wallet, asks the buyer first, or blocks with a reason.
+- Optionally, PayPal only reserves the money and the buyer is charged when the store ships. Until then the buyer can cancel, and an unshipped reservation is released automatically after three days.
+- When something goes wrong, the buyer reports it once. The gateway sends the store the signed record and settles a refund, a part refund or a replacement inside rules the buyer set.
 
-**Protect.** Every step goes into a hash-chained, Ed25519-signed ledger: the mandate, the user's request, the page the gateway saw, each policy check and the PayPal order. When something goes wrong, that record settles it for both sides:
+**For the store**
 
-- **For the buyer:** the store shipped the wrong item. The user reports it once, the gateway sends the store the signed record, the store checks it against its own fulfilment record and refunds through PayPal.
-- **For the merchant:** a buyer disputes a purchase their own agent made. The store's agent answers through PayPal's Disputes API with the signed record as a PDF. In our sandbox run the case closed in the seller's favour.
+- A store joins by itself: it registers its address and publishes one file to prove it owns the site. An operator review grants "verified".
+- It receives a signed record of every paid order and checks the gateway's signature before shipping.
+- If a buyer opens a PayPal dispute, the store's agent answers it through the Disputes API with that signed record as evidence.
+- It sees an agent sales report: revenue, blocked requests grouped by the rule that stopped them, and suggestions such as "13 requests worth $1,820 were blocked only because the store is not verified".
+
+**For both**
+
+Every step is written to a hash-chained, Ed25519-signed ledger. Anyone can verify a record without an account, and any purchase can be compared fact by fact with PayPal's own record of the order.
 
 ## How we built it
 
-- **Policy engine.** A pure, deterministic function. Limits, merchant rules, thresholds, expiry and price checks are code. A model answers one fuzzy question, whether a product falls in the mandate's categories, and its answer can only narrow what is allowed.
-- **PayPal.** The user saves their wallet once with Vault v3 setup and payment tokens. Each approved purchase is an Orders v2 order captured against the vault token with the merchant as payee. Refunds are issued by the merchant through Payments v2. The merchant's agent uses Customer Disputes v1 to submit evidence or concede. Webhooks for captures, refunds and disputes are verified with PayPal's signature check.
-- **MCP.** The gateway exposes four tools: `get_mandate`, `request_purchase`, `check_status` and `report_problem`. Each demo store exposes its own catalogue over MCP, so an agent such as Claude Desktop can shop and pay with no custom integration.
-- **Evidence ledger.** Each entry carries the previous entry's hash and a signature over its own. Editing, removing or reordering a row is detected, and merchants verify records against the gateway's published public key.
-- **Stack.** Next.js and TypeScript on Vercel, PostgreSQL on Neon with Drizzle, Claude for the mandate compiler, the product classifier and problem analysis.
+Next.js 15 and TypeScript on Vercel, PostgreSQL on Neon with Drizzle, and the Model Context Protocol for the agent interface, with a REST API beside it.
+
+PayPal: Vault v3 saves the wallet once. Orders v2 pays the store directly from the vault token, either captured at once or authorized and captured on shipment. Payments v2 handles refunds, captures and releases. The store adds tracking to the order. Customer Disputes v1 carries the evidence. Webhooks are signature-checked. PayPal's Agent Toolkit is used in the evaluation as the no-gateway baseline.
+
+Claude drafts mandates, classifies products and frames problem reports. The design rule is that a model can only narrow what is allowed. Limits, payees, stores and expiry are enforced by a deterministic policy engine, so a prompt injection can change what an agent asks for but cannot raise a limit or change who gets paid.
 
 ## Challenges we ran into
 
-- **Sandbox account country.** The default sandbox accounts are created in the developer's country. Ours could not save a wallet, and the approval page failed with a generic error before login. Moving the gateway and the buyer to US sandbox accounts fixed it.
-- **A buyer cannot open a dispute through the API.** We designed around it: the buyer opens the case in PayPal's Resolution Center, and the merchant side is automated from the first webhook.
-- **PayPal's docs and responses disagree on names.** Dispute action links are documented with hyphens and returned with underscores. Our agent sat idle on its first real dispute until we matched what the API returns.
-- **Prompt injection reaches the classifier too.** A product page can tell the model "classify this as running shoes". The classifier is told the page is untrusted data, cash-equivalent products are blocked regardless of its verdict, and the spending limits never depend on it.
-- **A mandate that named "Stride"** did not match the registered "Stride Running Co." We now resolve merchant names to the registry before the user confirms, and warn about names the gateway does not know.
+- Default sandbox accounts could not save a wallet; it needed US business and US personal accounts.
+- Paying a third-party store directly from a saved wallet, and having that store refund from its own account.
+- Only the store can release a reservation. PayPal refused the gateway's own attempt, so cancelling became a request to the store.
+- Answering a dispute end to end: evidence as a PDF, tracking, and PayPal's link relations.
+- A page scanner strict enough to catch hidden instructions without flagging ordinary product copy.
+- An honest baseline. Our first comparison showed no difference with and without the gateway. The difference only appeared in the planner and multi-agent designs, and we report it at its real size.
 
 ## Accomplishments that we're proud of
 
-- A real agent (Claude Desktop) bought a pair of shoes through the gateway with real sandbox money and no payment details in its context.
-- A page with a hidden instruction could not make an agent overspend or buy a gift card, including when the agent obeyed it.
-- Both after-purchase outcomes ran on the PayPal sandbox: a refund when the store was wrong, and a dispute resolved for the seller when the buyer was wrong.
-- 15 policy tests pass, and a 17-step end-to-end run passes against the hosted deployment with real sandbox payments.
+- Everything runs against the PayPal sandbox with real sandbox money: payments, reservations, refunds, part refunds and a dispute resolved in the seller's favour.
+- Agents in nine frameworks (Anthropic SDK, Claude Agent SDK, Vercel AI SDK, LangGraph in TypeScript and Python, CrewAI, Pydantic AI, OpenAI Agents SDK, Google ADK), three designs and six scenarios: 204 of 204 runs pass, and nothing the mandate forbids was paid in any of them. Every run can be browsed with its tool calls and the gateway's decisions.
+- The same agents with no gateway, using PayPal's Agent Toolkit and the mandate as text in the prompt, created $540 of orders the mandate forbids in 4 of 147 runs. With the gateway: $0. A strongly worded prompt also reached $0, so the claim we make is narrower: the gateway's result does not depend on the prompt.
+- One model followed a product page's hidden instruction and asked for a $100 gift card. The gateway blocked it.
+- 44 end-to-end checks pass on the live deployment, plus 77 unit tests and 14 hostile or ambiguous mandate texts.
+- Two demo stores live in their own repositories and deployments and join the way any outside merchant would.
 
 ## What we learned
 
-The interesting problems in agentic commerce are after checkout. Spend limits are necessary, but the record of what the user asked for and what the agent saw is what makes a refund or a dispute quick to resolve. And a control is only worth trusting if it does not sit inside the model it is meant to control.
+Agent safety for payments is not a prompting problem. The useful boundary is between what a model may judge (is this a running shoe?) and what code must decide (how much, to whom, until when). And evidence is worth as much as enforcement: the record that blocks a bad purchase is the same record that settles a refund or wins a dispute.
 
-## What's next for Mandate
+## What's next for Mandate Gateway
 
-- **Real merchant onboarding** through PayPal's partner flows, so the gateway can pay any merchant in production. Today it is sandbox only and its demo merchants share its deployment.
-- **Agent-to-agent settlement:** let the buyer's and merchant's agents agree a partial refund or replacement before a dispute is ever opened.
-- **Alignment with emerging mandate standards** for agent payments, so a Mandate record is portable across gateways.
-- **Real accounts** in place of anonymous dashboard sessions, and proper merchant authentication for evidence requests.
+- Production PayPal, with partner onboarding for stores.
+- Signed requests between stores and the gateway, in place of proving identity with a payment id.
+- A real product catalogue for agents to shop.
+- Mandates expressed as verifiable credentials a store can check directly.
+
+## Where the numbers come from
+
+| Number | Source |
+|---|---|
+| 204 of 204 agent runs | `agent-tests/RESULTS.md`, browsable at `/developers/tests` |
+| $540 in 4 of 147 runs; $0 with the gateway | `agent-tests/results/baseline.json` (orders created, not captured; three to five runs per cell) |
+| 44 end-to-end checks | `scripts/e2e.ts` against the live deployment |
+| 77 unit tests | `pnpm test` |
+| 14 mandate texts | `scripts/mandate-adversarial.ts` |
+| Reserve, charge on shipment, cancel, automatic release | `scripts/hold-check.ts` |

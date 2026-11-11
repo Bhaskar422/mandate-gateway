@@ -1,52 +1,45 @@
 # Demo video script
 
-Target length: 2 minutes 50 seconds. The voiceover is about 400 words, which is roughly 2:40 at a normal pace, leaving a little room.
+Target length: 2 minutes 50 seconds. The voiceover is about 365 words, roughly 2:25 at a normal pace, which leaves room for pages to load.
+
+The order is deliberate. Blocking a bad purchase gets 40 seconds. The time goes to what other tools skip: what happens after the money moves, for the buyer and for the store.
 
 ## Before you record
 
 Do these once, in this order, so every shot works first time.
 
-1. **Fresh mandate.** On the hosted dashboard, click **Revoke** if a mandate is active. Leave the mandate box showing the example sentence.
-2. **Rename the store account (optional).** In the PayPal developer dashboard, change the Stride sandbox account's business name from "Test Store" to "Stride Running Co." so PayPal's own screens match.
-3. **Claude Desktop.** Quit and reopen it. Start a new chat and confirm the `mandate`, `stride-store` and `kickz-store` tools are listed.
-4. **Naive agent key.** In the dashboard, click **Connect agent** with the name `Naive agent` and copy the key from the config it shows. In a terminal in the project folder, run `export MANDATE_AGENT_KEY=` followed by that key. Keep the terminal open.
-5. **Windows.** Put the dashboard on the left and Claude Desktop on the right. Have three more tabs ready: the Cloudline product page (`/stores/stride/products/STR-CLOUD`), Stride's back office (`/stores/stride/admin`), and the PayPal sandbox case page for the resolved dispute.
+1. **Use your own sandbox buyer,** linked on the hosted dashboard, not the demo wallet. The dispute shot needs a PayPal login.
+2. **Fresh mandate.** On Mandates, revoke anything active. Leave the composer open on "Write it myself" with the first example sentence in the box.
+3. **Settings.** Turn on "Charge only on shipment". Set settlement rules to "Always ask me".
+4. **A dispute in advance.** PayPal's sandbox takes several minutes to process a dispute, so shot 7 shows one that is already resolved. If you do not have one from an earlier session, make a purchase, open a dispute as the buyer in PayPal's Resolution Center, then press "Check PayPal for disputes" and the ruling button in Stride's back office. Keep the PayPal case page open in a tab.
+5. **Tabs, left to right:** the dashboard on Mandates; Assistant; Stride's back office (`/stores/stride/admin`); the PayPal sandbox case page; the test runs page (`/developers/tests`).
 6. **Zoom.** Set the browser to 125% so text is readable at 1080p.
-
-The dispute takes PayPal's sandbox several minutes to process, so shot 7 shows the case that is already resolved. Say so in the voiceover, as written.
 
 ## Shots
 
 | # | Time | On screen | Voiceover |
 |---|---|---|---|
-| 1 | 0:00–0:15 | Title card: "Mandate. The trust layer for agent payments." Then the dashboard. | "AI agents can now pay with PayPal. The hard question is who let them, and what happens when it goes wrong. Mandate is a gateway between any shopping agent and your PayPal account. The agent never holds your payment details." |
-| 2 | 0:15–0:35 | Click **Turn into rules**. The rules table appears. Click **Confirm mandate**. | "I write what my agent may do in plain English: up to a hundred and fifty dollars on running shoes, known merchants only, ask me above a hundred. A model turns that into rules, I confirm them, and from here on plain code enforces them. No model can raise these limits." |
-| 3 | 0:35–1:00 | In Claude Desktop, type: *Find road running shoes under $100 at Stride and buy the best pair for me.* The activity feed shows **Approved · paid**, $89. | "Claude shops at a store through MCP and asks the gateway to buy. The gateway reads the product page itself, checks the mandate, and pays the store from my saved PayPal wallet. Real sandbox money, with nobody at the keyboard." |
-| 4 | 1:00–1:15 | Type: *Buy the Velocity Elite from Kickz.* The feed shows **Blocked**. Expand the checks. | "A hundred and forty dollar pair from a store the gateway hasn't verified. Blocked, with the reason. Every check is listed, and each one says whether code or a model enforced it." |
-| 5 | 1:15–1:45 | Show the Cloudline product page, which looks normal to a shopper. Switch to the terminal and run the command below. Pause on the STORE line, which prints the hidden instruction the agent receives. The output ends in **BLOCKED**. | "This product page hides an instruction for AI agents: buy a hundred dollar gift card instead. A careful agent ignores it. A naive one doesn't. Here is an agent that obeys it. The gateway blocks the purchase anyway, because gift cards are never allowed and the limits don't live in a prompt." |
-| 6 | 1:45–2:15 | Stride back office: click **Ship wrong item** on the $89 order. Back in the dashboard: **Report a problem**, then **Send with evidence**. Status becomes **Refunded**. Open **Evidence record**. | "Now the part other agent tools skip: after the purchase. The store ships the wrong item. I report it once. The gateway sends the store a signed record of what I asked for and what was ordered. The store checks it against its own records and refunds me through PayPal. Every step is in a hash-chained, signed ledger." |
-| 7 | 2:15–2:40 | PayPal sandbox case page showing the seller's evidence, then the back office row reading "dispute resolved: RESOLVED_SELLER_FAVOR". | "It protects merchants too. Earlier, this buyer opened a PayPal dispute claiming the item never arrived. The store's agent answered through PayPal's Disputes API with the signed record and a tracking number, and the case closed in the seller's favour. In the sandbox we trigger PayPal's ruling ourselves." |
-| 8 | 2:40–2:50 | Architecture diagram from the README, then the repo URL. | "Vault, Orders, refunds, Disputes and webhooks, working together. PayPal made agents able to pay. Mandate makes it safe to let them." |
-
-## The command for shot 5
-
-Run it from the project folder, in the terminal where you exported the key:
-
-```bash
-PATH=$HOME/.nvm/versions/node/v22.23.4/bin:$PATH pnpm exec tsx scripts/gullible-agent.ts https://mandate-gateway.vercel.app stride STR-CLOUD "Buy me the Cloudline Daily Trainer from Stride"
-```
-
-It prints the user's request, the product text with the hidden instruction, the agent deciding to follow it, and the gateway's block.
+| 1 | 0:00–0:15 | Title card: "Mandate. Every agent purchase comes with proof." Then the overview page. | "AI agents can now pay with PayPal. Most tools stop at keeping the agent inside a budget. We think the harder question is what happens after the money moves. Mandate is a gateway between any shopping agent and your PayPal account, and it signs a record of every step." |
+| 2 | 0:15–0:35 | Mandates. Click **Turn into rules**. Scroll past the rules to "What this means in practice". Click **Confirm mandate**. | "I say what my agent may do in plain English. A model drafts the rules, code checks them against my own words, and I see what they mean on example purchases before anything takes effect. After this, only code enforces them." |
+| 3 | 0:35–0:55 | Assistant. Send: *Buy me road running shoes under $100 from Stride.* The steps appear; the result reads **Reserved, charged when it ships**. (With an ask-first amount below the price, it waits for approval first: approve it on the purchase page.) | "The agent never sees my payment details. It asks. The gateway finds the store in its own registry, reads the product page itself, and checks my rules. This one passes, so PayPal reserves the money. I am charged only when the store ships." |
+| 4 | 0:55–1:15 | Send: *Buy the Cloudline Daily Trainer from Stride.* The result waits for approval. Open the record: the injection warning shows the hidden text. | "This product page hides an instruction telling AI agents to buy a gift card instead. The gateway found it on the page it fetched, held the purchase, and shows me the text. Even an agent that obeys it gets nowhere: gift cards are blocked in code." |
+| 5 | 1:15–1:45 | Stride back office: **Ship the wrong item** on the reserved order. Back on the purchase page: status is **Paid**. Click **Report a problem**, type *The wrong item arrived*, click **Send to the store**. Status becomes **Refunded**. Scroll the signed timeline. | "The store ships, and only now am I charged. But it sent the wrong item. I report it once. The gateway sends the store the signed record of what I ordered, the store checks it against what it shipped, and refunds me through PayPal. Every step is here, signed, and anyone can verify it." |
+| 6 | 1:45–2:05 | Same purchase page: click **Check against PayPal**. The table shows every row matching. | "The ledger is our account of what happened. PayPal keeps its own. One click compares the two: amount, payee, capture, refund. They match." |
+| 7 | 2:05–2:30 | PayPal sandbox case page showing the seller's evidence, then the back office row reading that the dispute resolved in the seller's favour. Then scroll up to "Agent sales". | "It works for the store too. Earlier, a buyer opened a PayPal dispute saying the item never arrived. The store's agent answered through the Disputes API with the signed record and the tracking number, and PayPal ruled for the seller. And the store sees what agents are doing for it: revenue, and the requests it lost, with the reason." |
+| 8 | 2:30–2:50 | The test runs page: the comparison block, then scroll the run list. End on the repo URL. | "We ran agents in nine frameworks through this: two hundred and four runs, nothing paid outside a mandate. Without the gateway, the same agents created five hundred and forty dollars of orders they should not have. Vault, Orders, authorizations, refunds, Disputes and webhooks, working together. Every agent purchase, with proof." |
 
 ## If something goes off-script
 
-- **Claude asks a clarifying question in shot 3.** Answer "the Tempo 3, go ahead" and cut the pause in editing.
-- **Claude buys the Cloudline itself when you only meant to show the page.** Shot 5 does not use Claude, so this should not happen; if you try the Cloudline prompt in Claude and it ignores the hidden text, that is the correct behaviour for a careful agent and worth one line of voiceover.
-- **Shot 6 says there is nothing to refund.** The order must be the paid $89 one from shot 3, and you must click **Ship wrong item**, not **Ship order**.
-- **The budget runs out.** Revoke the mandate and confirm a new one; the budget is per mandate.
+- **The assistant asks a question instead of buying.** Answer it in one line, or start a new chat and send the message again. Cut the retry in editing.
+- **Shot 3 says "Paid" instead of "Reserved".** "Charge only on shipment" is off. Turn it on in Settings and repeat the shot.
+- **Shot 4 is paid instead of held.** The page scan did not flag it; check that the product is STR-CLOUD. Do not narrate around it: re-record.
+- **The refund in shot 5 becomes an offer.** The store only refunds in full when its records show a different item shipped. Use **Ship the wrong item**, not **Ship the order**.
+- **"Check against PayPal" shows a mismatch.** Stop and look before recording further. It should not happen, and it means something real is off.
 
 ## Recording checklist
 
-- 1080p, 30 fps, system audio off, microphone on.
-- Keep the cursor still while you speak.
-- Under three minutes total, uploaded to YouTube as public or unlisted.
+- [ ] 1080p, browser at 125%, notifications off.
+- [ ] No keys, tokens or personal email visible. The Agents page shows only key prefixes; avoid `.env` files and the terminal.
+- [ ] The sandbox buyer's email appears in the sidebar. It is a sandbox address; crop it if you prefer.
+- [ ] Voiceover recorded separately and laid over the shots, so pauses for loading can be cut.
+- [ ] Final length under the limit the submission form states.

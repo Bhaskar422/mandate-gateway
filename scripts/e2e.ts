@@ -179,7 +179,7 @@ async function main() {
     const unproven = await mcp(G, "request_purchase", { product_url: peakUrl, expected_price: 95, user_request: "Buy trail running shoes" }, otherKey);
     check("a store that has registered but not proved its domain is not paid", unproven.status === "blocked" && /payee/.test(unproven.message), unproven.message);
     const early = await verifyMerchantDomain(userId, reg.id).then(() => "verified", (e) => String(e.message));
-    check("verification fails until the store publishes the token", /verification token/.test(early), early);
+    check("verification fails until the store publishes the token", /ownership token/.test(early), early);
     await publishVerificationToken("peak", reg.verificationToken!);
     const ok = await verifyMerchantDomain(userId, reg.id);
     check("verification succeeds once the token is on the store's site", !!ok.domainVerifiedAt && ok.name === "Peak Trail Supply", ok.name);

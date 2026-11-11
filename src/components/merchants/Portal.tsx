@@ -60,7 +60,13 @@ function MyStore({ m, insights, appUrl, onChange }: { m: MerchantView; insights?
         </div>
         <Badge tone={t.tone} icon={t.icon}>{t.label}</Badge>
       </div>
-      {m.trust === "pending" && m.verificationToken && m.wellKnownUrl ? (
+      {m.claiming && m.verificationToken && m.wellKnownUrl ? (
+        <div className="mt-4 border-t border-line pt-4">
+          <p className="eyebrow mb-2">Manage this store from this browser</p>
+          <p className="mb-3 text-base text-ink-2">This store was registered from another browser. Replace the token in its published file with the one below and check the file. This browser then becomes the one that manages the store and sees its agent sales. Nothing else about the store changes.</p>
+          <ProveOwnership merchantId={m.id} baseUrl={m.baseUrl} token={m.verificationToken} wellKnownUrl={m.wellKnownUrl} appUrl={appUrl} onProved={onChange} />
+        </div>
+      ) : m.trust === "pending" && m.verificationToken && m.wellKnownUrl ? (
         <div className="mt-4 border-t border-line pt-4">
           <p className="eyebrow mb-2">Step 2 of 2 · Prove you own the site</p>
           <ProveOwnership merchantId={m.id} baseUrl={m.baseUrl} token={m.verificationToken} wellKnownUrl={m.wellKnownUrl} appUrl={appUrl} onProved={onChange} />
@@ -91,7 +97,7 @@ export default function MerchantPortal({ merchants, insights = {}, appUrl }: { m
   const register = useAction(registerMerchantAction);
   const [url, setUrl] = useState("");
   const [notice, setNotice] = useState<{ kind: "exists" | "proved"; text: string } | null>(null);
-  const mine = merchants.filter((m) => m.registeredByMe);
+  const mine = merchants.filter((m) => m.registeredByMe || m.claiming);
   const peakListed = merchants.some((m) => m.baseUrl === `${appUrl}/stores/peak`);
 
   return (
@@ -125,7 +131,8 @@ export default function MerchantPortal({ merchants, insights = {}, appUrl }: { m
           e.preventDefault(); setNotice(null);
           const r = await register.run(url);
           if (!r) return;
-          if (!r.token) setNotice({ kind: "exists", text: "That store is already in the registry, so there is nothing to register again." });
+          if (r.claiming) setNotice({ kind: "exists", text: "That store is already registered. If it is yours, prove it from this browser: its card below has a token for you to publish." });
+          else if (!r.token) setNotice({ kind: "exists", text: "That store is already in the registry and managed from this browser, so there is nothing to register again." });
           setUrl(""); router.refresh();
         }}>
           <label htmlFor="store-url" className="field-label">Store address</label>
@@ -144,8 +151,8 @@ export default function MerchantPortal({ merchants, insights = {}, appUrl }: { m
       </section>
 
       <section aria-label="Stores registered from this browser">
-        <h2 className="mb-1 text-lg font-semibold text-ink">Stores registered from this browser</h2>
-        <p className="mb-3 text-sm text-ink-3">The ownership token and a store&apos;s agent sales are shown only in the browser that registered the store.</p>
+        <h2 className="mb-1 text-lg font-semibold text-ink">Stores managed from this browser</h2>
+        <p className="mb-3 text-sm text-ink-3">A store&apos;s token and its agent sales are shown only in the browser that proved it owns the site. On a new browser, register the same address again: you get a fresh token, and publishing it moves the store to that browser.</p>
         {notice?.kind === "proved" && (
           <Banner tone="ok" role="status" className="mb-3" icon={<CircleCheck size={18} aria-hidden />} title="Ownership proved">{notice.text}</Banner>
         )}

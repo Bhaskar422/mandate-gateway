@@ -108,7 +108,7 @@ function ChargeOnShipment() {
       <div className="max-w-xl">
         <p className="text-lg font-semibold text-ink">{on ? "You are charged when the store ships" : "You are charged when the purchase is made"}</p>
         <p className="text-sm text-ink-3">
-          With this on, PayPal reserves the money at purchase and the store is paid only once it ships. Until then you can cancel and nothing is taken. It applies at stores that support it; elsewhere you are charged at purchase as usual. A reservation counts against your mandate&apos;s budget.
+          With this on, PayPal reserves the money at purchase and the store is paid only once it ships. Until then you can cancel and nothing is taken, and a reservation the store has not shipped after {state.account.settings.holdReleaseDays} days is released automatically. It applies at stores that support it; elsewhere you are charged at purchase as usual. A reservation counts against your mandate&apos;s budget.
         </p>
         <ErrorText>{save.error}</ErrorText>
       </div>

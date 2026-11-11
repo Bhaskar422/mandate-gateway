@@ -2,7 +2,7 @@
 // Needs a running server and a linked sandbox wallet: E2E_VAULT_ID=... pnpm exec tsx --env-file=.env.local scripts/hold-check.ts
 import { eq } from "drizzle-orm";
 import { db, schema } from "../src/lib/db";
-import { cancelHold, confirmMandate, createAgent, requestPurchase, updateSettings } from "../src/lib/gateway";
+import { cancelHold, confirmMandate, createAgent, HOLD_RELEASE_DAYS, releaseStaleHolds, requestPurchase, updateSettings } from "../src/lib/gateway";
 import { verifyChain } from "../src/lib/ledger";
 import { reconcilePurchase } from "../src/lib/reconcile";
 import { shipOrder } from "../src/lib/stores/merchant";
@@ -41,6 +41,17 @@ async function main() {
     console.log("4 reconcile after cancel:", await rec(p4.id));
     try { await cancelHold(userId, p4.id); console.log("4 second cancel: allowed (wrong)"); } catch (e) { console.log("4 second cancel refused:", (e as Error).message.slice(0, 80)); }
   }
+  // A reservation the store never ships is released automatically once it is older than the limit.
+  const p5 = await buy("STR-WATCH", 12900).then((x) => x.status === "authorized" ? x : buy("STR-SOCK3", 1800));
+  if (p5.status === "authorized") {
+    const before = await releaseStaleHolds(userId);
+    console.log("5 fresh reservation left alone:", before.released === 0);
+    await db.update(schema.purchases).set({ updatedAt: new Date(Date.now() - (HOLD_RELEASE_DAYS + 1) * 864e5) }).where(eq(schema.purchases.id, p5.id));
+    const r = await releaseStaleHolds(userId);
+    const [after5] = await db.select().from(schema.purchases).where(eq(schema.purchases.id, p5.id));
+    console.log("5 stale reservation released automatically:", r.released, "| purchase", after5.status);
+    console.log("5 reconcile after automatic release:", await rec(p5.id));
+  } else console.log("5 could not reserve a purchase to test automatic release:", p5.status, p5.decision.reason.slice(0, 80));
   console.log("ledger intact:", (await verifyChain()).ok);
   process.exit(0);
 }

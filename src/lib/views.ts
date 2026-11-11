@@ -4,7 +4,7 @@ import { assistantDailyLimit, assistantRemaining } from "./assistant";
 import { DEMO_MANDATE_CAP_CENTS, demoWalletAvailable } from "./demo-wallet";
 import { appUrl, llmConfigured, paypalSimulated } from "./config";
 import { db, schema } from "./db";
-import { committedSpend, ensureSeed, getUser } from "./gateway";
+import { committedSpend, ensureSeed, getUser, HOLD_RELEASE_DAYS, releaseStaleHolds } from "./gateway";
 import { listMerchants } from "./merchants";
 import { normalizeRules } from "./rules";
 
@@ -24,6 +24,13 @@ export async function dashboardState(userId: string) {
     assistantRemaining(userId),
     demoWalletAvailable(),
   ]);
+  // A reservation the store never shipped is released the next time its buyer's dashboard loads, as well as by the daily job.
+  const cutoff = Date.now() - HOLD_RELEASE_DAYS * 864e5;
+  if (rows.some((p) => p.status === "authorized" && p.updatedAt.getTime() < cutoff)) {
+    await releaseStaleHolds(userId).catch((e) => console.error("releasing stale reservations failed:", e));
+    const fresh = await db.select().from(schema.purchases).where(eq(schema.purchases.userId, userId)).orderBy(desc(schema.purchases.createdAt)).limit(200);
+    rows.splice(0, rows.length, ...fresh);
+  }
   const agentName = (id: string | null) => agentRows.find((a) => a.id === id)?.name ?? null;
   const merchantName = (id: string | null) => merchantRows.find((m) => m.id === id)?.name ?? null;
   const now = Date.now();
@@ -84,7 +91,7 @@ export async function dashboardState(userId: string) {
   return {
     appUrl: appUrl(), simulated: paypalSimulated(), llm: llmConfigured(),
     assistant: { remaining: assistantLeft, dailyLimit: assistantDailyLimit() },
-    account: { frozen: !!user?.frozenAt, frozenAt: iso(user?.frozenAt), settings: { autoAcceptRefundPercent: user?.settings?.autoAcceptRefundPercent ?? 100, autoAcceptReplacement: !!user?.settings?.autoAcceptReplacement, notifyUrl: user?.settings?.notifyUrl ?? null, chargeOnShipment: !!user?.settings?.chargeOnShipment } },
+    account: { frozen: !!user?.frozenAt, frozenAt: iso(user?.frozenAt), settings: { autoAcceptRefundPercent: user?.settings?.autoAcceptRefundPercent ?? 100, autoAcceptReplacement: !!user?.settings?.autoAcceptReplacement, notifyUrl: user?.settings?.notifyUrl ?? null, chargeOnShipment: !!user?.settings?.chargeOnShipment, holdReleaseDays: HOLD_RELEASE_DAYS } },
     paypal: link?.status === "active" ? { email: link.isDemo ? "Demo wallet" : link.payerEmail, demo: link.isDemo } : null,
     demoWallet: { available: demoAvailable, mandateCapCents: DEMO_MANDATE_CAP_CENTS },
     mandates,

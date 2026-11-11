@@ -212,3 +212,15 @@ export const gatewaySettings = pgTable("gateway_settings", {
   value: jsonb("value").$type<Record<string, unknown>>().notNull(),
   updatedAt: ts("updated_at").notNull().defaultNow(),
 });
+
+/**
+ * A browser that did not register a store can still ask to manage it. It gets its own token, and becomes the
+ * store's registrant once that token appears in the store's published file. One row per store and browser, so
+ * nobody can invalidate anyone else's token.
+ */
+export const merchantClaims = pgTable("merchant_claims", {
+  merchantId: text("merchant_id").notNull().references(() => merchants.id, { onDelete: "cascade" }),
+  userId: text("user_id").notNull(),
+  token: text("token").notNull(),
+  createdAt: ts("created_at").notNull().defaultNow(),
+}, (t) => [primaryKey({ columns: [t.merchantId, t.userId] })]);

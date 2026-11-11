@@ -34,6 +34,19 @@ async function call<T = Record<string, unknown>>(c: PayPalCreds, method: string,
   if (!res.ok) throw new PayPalError(res.status, j ?? text, res.headers.get("paypal-debug-id"));
   return j as T;
 }
+/**
+ * PayPal answers 409 PREVIOUS_REQUEST_IN_PROGRESS when another call on the same payment has not finished, for
+ * example a refund sent moments after tracking was added to the order. It asks the caller to wait and try again.
+ */
+async function whenFree<T>(f: () => Promise<T>): Promise<T> {
+  for (let attempt = 0; ; attempt++) {
+    try { return await f(); }
+    catch (e) {
+      if (!(e instanceof PayPalError) || e.status !== 409 || e.issue !== "PREVIOUS_REQUEST_IN_PROGRESS" || attempt >= 4) throw e;
+      await new Promise((r) => setTimeout(r, 1200 * (attempt + 1)));
+    }
+  }
+}
 const safeJson = (t: string) => { try { return JSON.parse(t); } catch { return null; } };
 const need = (c: PayPalCreds | null) => { if (!c) throw new Error("PayPal credentials are not configured"); return c; };
 const sim = (p: string) => `SIM-${p}-${randomBytes(5).toString("hex").toUpperCase()}`;
@@ -107,12 +120,12 @@ export async function holdWithVault(a: OrderInput): Promise<HoldResult> {
 /** Take the reserved money. Called when the merchant has shipped. */
 export async function captureHold(authorizationId: string, requestId: string) {
   if (paypalSimulated() || authorizationId.startsWith("SIM-")) return { id: sim("CAPTURE"), status: "COMPLETED" };
-  return call<{ id: string; status: string }>(need(gatewayCreds()), "POST", `/v2/payments/authorizations/${authorizationId}/capture`, { final_capture: true }, { requestId });
+  return whenFree(() => call<{ id: string; status: string }>(need(gatewayCreds()), "POST", `/v2/payments/authorizations/${authorizationId}/capture`, { final_capture: true }, { requestId }));
 }
 /** Release the reserved money without charging it. */
 export async function voidHold(authorizationId: string, c: PayPalCreds | null = gatewayCreds()) {
   if (paypalSimulated() || authorizationId.startsWith("SIM-")) return;
-  await call(need(c), "POST", `/v2/payments/authorizations/${authorizationId}/void`, undefined, {});
+  await whenFree(() => call(need(c), "POST", `/v2/payments/authorizations/${authorizationId}/void`, undefined, {}));
 }
 
 /** Attach a carrier and tracking number to the PayPal order, so the buyer sees the shipment in PayPal. */
@@ -128,10 +141,10 @@ export const getOrder = (orderId: string, c = gatewayCreds()) => call(need(c), "
 
 export async function refundCapture(c: PayPalCreds | null, captureId: string, a: { amountCents?: number; currency?: string; note: string; requestId: string }) {
   if (paypalSimulated() || captureId.startsWith("SIM-")) return { id: sim("REFUND"), status: "COMPLETED" };
-  return call<{ id: string; status: string }>(need(c), "POST", `/v2/payments/captures/${captureId}/refund`, {
+  return whenFree(() => call<{ id: string; status: string }>(need(c), "POST", `/v2/payments/captures/${captureId}/refund`, {
     ...(a.amountCents ? { amount: { value: usd(a.amountCents), currency_code: a.currency ?? "USD" } } : {}),
     note_to_payer: a.note.slice(0, 255),
-  }, { requestId: a.requestId });
+  }, { requestId: a.requestId }));
 }
 
 // ---- Disputes: merchant-side only. A buyer cannot open one through the API. -----------------

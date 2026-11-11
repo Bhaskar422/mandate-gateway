@@ -3,6 +3,7 @@ import { Check, CircleHelp, Handshake, MessageSquareWarning, X } from "lucide-re
 import { useState } from "react";
 import { answerOfferAction, approvalAction, cancelHoldAction, reconcilePurchaseAction, reportProblemAction } from "@/app/actions";
 import type { PurchaseView } from "@/lib/views";
+import { useAccount } from "../AccountProvider";
 import { describeOffer, money } from "../format";
 import Banner, { ErrorText } from "../ui/Banner";
 import Button from "../ui/Button";
@@ -14,11 +15,13 @@ export function ApprovalButtons({ p, size = "md" }: { p: PurchaseView; size?: "s
   const { run, pending, error } = useAction(approvalAction);
   const [choice, setChoice] = useState<boolean | null>(null);
   const go = (approve: boolean) => { setChoice(approve); run(p.id, approve); };
+  // With "charge on shipment" on, approving may only reserve the money, so the button does not promise a charge.
+  const reserve = useAccount().state.account.settings.chargeOnShipment;
   return (
     <div>
       <div className="flex flex-wrap gap-2">
-        <Button variant="primary" size={size} icon={<Check size={15} aria-hidden />} loading={pending && choice === true} loadingText="Paying with PayPal" disabled={pending} onClick={() => go(true)}>
-          Approve and pay {p.amountCents > 0 && money(p.amountCents, p.currency)}
+        <Button variant="primary" size={size} icon={<Check size={15} aria-hidden />} loading={pending && choice === true} loadingText={reserve ? "Asking PayPal" : "Paying with PayPal"} disabled={pending} onClick={() => go(true)}>
+          {reserve ? "Approve" : "Approve and pay"} {p.amountCents > 0 && money(p.amountCents, p.currency)}
         </Button>
         <Button size={size} icon={<X size={15} aria-hidden />} loading={pending && choice === false} disabled={pending} onClick={() => go(false)}>Decline</Button>
       </div>
@@ -80,10 +83,11 @@ export function ReportProblem({ p }: { p: PurchaseView }) {
 /** A reserved purchase can be cancelled until the store ships it. */
 export function CancelHold({ p }: { p: PurchaseView }) {
   const { run, pending, error } = useAction(cancelHoldAction);
+  const { state } = useAccount();
   if (p.status !== "authorized") return null;
   return (
     <div className="space-y-2">
-      <p className="text-base text-ink-2">The money is reserved at PayPal but has not been charged. It is charged when {p.merchant ?? "the store"} ships. Until then you can cancel and nothing is taken.</p>
+      <p className="text-base text-ink-2">The money is reserved at PayPal but has not been charged. It is charged when {p.merchant ?? "the store"} ships. Until then you can cancel and nothing is taken. If it has not shipped after {state.account.settings.holdReleaseDays} days, the reservation is released automatically.</p>
       <ConfirmButton variant="secondary" question="Cancel this purchase and release the money?" confirmLabel="Cancel purchase" loading={pending} onConfirm={() => run(p.id)}>Cancel before it ships</ConfirmButton>
       <ErrorText>{error}</ErrorText>
     </div>

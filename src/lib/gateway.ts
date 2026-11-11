@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, inArray, ne, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, lt, ne, sql } from "drizzle-orm";
 import { appUrl, paypalSimulated, storePayee } from "./config";
 import { db, schema, type Tx } from "./db";
 import type { SettlementOffer, SettlementTurn, UserSettings } from "./db/schema";
@@ -34,7 +34,10 @@ export const ensureSeed = () => (seeded ??= (async () => {
     const payee = storePayee(s.slug);
     const base = `${appUrl()}/stores/${s.slug}`;
     const row = { name: s.name, baseUrl: base, verified: s.verified, paypalMerchantId: payee.merchantId, paypalEmail: payee.email, source: "builtin" as const, ordersUrl: `${base}/api/orders`, returnsUrl: `${base}/api/returns`, supportsHold: true };
-    await db.insert(merchants).values({ id: `mer_${s.slug}`, ...row }).onConflictDoUpdate({ target: merchants.id, set: row });
+    // "Verified" is seeded once. After that it is the operator's decision and a restart must not overwrite it.
+    const { verified: _seedOnly, ...keep } = row;
+    void _seedOnly;
+    await db.insert(merchants).values({ id: `mer_${s.slug}`, ...row }).onConflictDoUpdate({ target: merchants.id, set: keep });
   }
 })().catch((e) => { seeded = null; throw e; }));
 
@@ -380,10 +383,12 @@ export async function captureOnShipment(a: { purchaseId: string; authorizationId
   return { entry, captureId: cap.id };
 }
 
-/** The buyer cancels a reserved purchase before it ships. The store releases the reservation; nothing is charged. */
-export async function cancelHold(userId: string, purchaseId: string) {
-  const [p] = await db.select().from(purchases).where(and(eq(purchases.id, purchaseId), eq(purchases.userId, userId)));
-  if (!p || p.status !== "authorized" || !p.paypalAuthorizationId || !p.merchantId) throw new Error("This purchase is not waiting to ship, so there is nothing to cancel");
+/** How long a reservation may wait for the store to ship before the gateway has it released. PayPal honours a hold for 3 days. */
+export const HOLD_RELEASE_DAYS = Number(process.env.HOLD_RELEASE_DAYS ?? 3);
+
+/** Ask the store to release a reservation and record the result. Only the store's own PayPal account can release it. */
+async function releaseHold(p: Purchase, why: string) {
+  if (p.status !== "authorized" || !p.paypalAuthorizationId || !p.merchantId) throw new Error("This purchase is not waiting to ship, so there is nothing to cancel");
   const [m] = await db.select().from(merchants).where(eq(merchants.id, p.merchantId));
   if (!m.ordersUrl) throw new Error("This store cannot be asked to release the reservation");
   let reply: { voided?: boolean; reason?: string };
@@ -392,9 +397,34 @@ export async function cancelHold(userId: string, purchaseId: string) {
     reply = await res.json();
   } catch (e) { throw new Error(`The store could not be reached: ${e instanceof Error ? e.message : e}`); }
   if (!reply.voided) throw new Error(reply.reason ?? "The store did not release the reservation. It may already have shipped.");
-  await append({ userId, purchaseId, type: "payment.voided", payload: { paypalAuthorizationId: p.paypalAuthorizationId, by: m.name, at: "the buyer's request" } });
-  const [row] = await db.update(purchases).set({ status: "cancelled", updatedAt: new Date() }).where(eq(purchases.id, p.id)).returning();
-  return row;
+  await append({ userId: p.userId, purchaseId: p.id, type: "payment.voided", payload: { paypalAuthorizationId: p.paypalAuthorizationId, by: m.name, at: why } });
+  const [row] = await db.update(purchases).set({ status: "cancelled", updatedAt: new Date() }).where(and(eq(purchases.id, p.id), eq(purchases.status, "authorized"))).returning();
+  return { row: row ?? p, merchant: m };
+}
+
+/** The buyer cancels a reserved purchase before it ships. The store releases the reservation; nothing is charged. */
+export async function cancelHold(userId: string, purchaseId: string) {
+  const [p] = await db.select().from(purchases).where(and(eq(purchases.id, purchaseId), eq(purchases.userId, userId)));
+  if (!p) throw new Error("This purchase is not waiting to ship, so there is nothing to cancel");
+  return (await releaseHold(p, "the buyer's request")).row;
+}
+
+/**
+ * Release every reservation the store has left unshipped for longer than HOLD_RELEASE_DAYS, for one user or for
+ * everyone. Safe to call at any time and by anyone: it only ever gives reserved money back to the buyer.
+ */
+export async function releaseStaleHolds(userId?: string) {
+  const cutoff = new Date(Date.now() - HOLD_RELEASE_DAYS * 864e5);
+  const stale = await db.select().from(purchases).where(and(eq(purchases.status, "authorized"), lt(purchases.updatedAt, cutoff), userId ? eq(purchases.userId, userId) : undefined)).limit(50);
+  const out = { checked: stale.length, released: 0, kept: [] as { purchaseId: string; why: string }[] };
+  for (const p of stale) {
+    try {
+      const { merchant } = await releaseHold(p, `automatically, because the store had not shipped after ${HOLD_RELEASE_DAYS} days`);
+      out.released++;
+      await notify(p.userId, { kind: "released", title: `Reservation released: ${p.product?.name ?? "purchase"}`, detail: `${merchant.name} did not ship within ${HOLD_RELEASE_DAYS} days, so the ${money(p.amountCents, p.currency)} reserved was released. Nothing was charged.`, url: `${appUrl()}/purchases/${p.id}` }).catch(() => {});
+    } catch (e) { out.kept.push({ purchaseId: p.id, why: e instanceof Error ? e.message : String(e) }); }
+  }
+  return out;
 }
 
 /** The one-tap approval. Limits are re-checked in code: approval never lifts the mandate's ceiling. */

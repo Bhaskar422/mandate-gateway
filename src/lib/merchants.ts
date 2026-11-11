@@ -1,13 +1,14 @@
 // Merchant onboarding. Any store can register by URL; the gateway will only pay it once it has proved
 // control of that URL by publishing a token the gateway issued.
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { appUrl } from "./config";
 import { db, schema } from "./db";
 import { ensureSeed } from "./gateway";
 import { newId } from "./ids";
 import { append } from "./ledger";
 
-const { merchants } = schema;
+const { merchants, merchantClaims } = schema;
+const newToken = () => `mandate-verify-${newId("t").slice(2)}${newId("t").slice(2)}`;
 export const WELL_KNOWN = "/.well-known/mandate-merchant.json";
 
 const PRIVATE = /^(localhost|127\.|10\.|192\.168\.|169\.254\.|172\.(1[6-9]|2\d|3[01])\.|0\.|\[?::1\]?|\[?f[cd][0-9a-f]{2}:)/i;
@@ -32,9 +33,24 @@ export async function registerMerchant(userId: string, rawUrl: string) {
   const [existing] = await db.select().from(merchants).where(eq(merchants.baseUrl, baseUrl));
   if (existing) return existing;
   const [m] = await db.insert(merchants).values({ id: newId("mer"), name: new URL(baseUrl).hostname, baseUrl, verified: false, source: "onboarded",
-    verificationToken: `mandate-verify-${newId("t").slice(2)}${newId("t").slice(2)}`, registeredBy: userId }).returning();
+    verificationToken: newToken(), registeredBy: userId }).returning();
   await append({ userId, type: "merchant.registered", payload: { merchantId: m.id, baseUrl } });
   return m;
+}
+
+/**
+ * The token this browser must publish to prove it owns the store, or null when there is nothing left to prove.
+ * The registrant of an unproved store gets the store's own token. Anyone else gets a token of their own: publishing
+ * it makes them the registrant, which is how a seller reaches their store from a new browser. A token is never
+ * shown to a browser it was not issued to.
+ */
+export async function ownershipToken(userId: string, m: typeof merchants.$inferSelect): Promise<{ token: string | null; claiming: boolean }> {
+  if (m.source !== "onboarded") return { token: null, claiming: false };
+  if (m.registeredBy === userId) return { token: m.domainVerifiedAt ? null : m.verificationToken, claiming: false };
+  const [mine] = await db.select().from(merchantClaims).where(and(eq(merchantClaims.merchantId, m.id), eq(merchantClaims.userId, userId)));
+  if (mine) return { token: mine.token, claiming: true };
+  const [made] = await db.insert(merchantClaims).values({ merchantId: m.id, userId, token: newToken() }).onConflictDoNothing().returning();
+  return { token: made?.token ?? null, claiming: true };
 }
 
 type WellKnown = { mandate_verification?: string; name?: string; paypal?: { merchant_id?: string; email?: string }; orders_url?: string; returns_url?: string; catalog_url?: string; holds?: boolean };
@@ -50,16 +66,23 @@ export async function verifyMerchantDomain(userId: string, merchantId: string) {
     if (!res.ok) throw new Error(`the store returned ${res.status}`);
     file = JSON.parse((await res.text()).slice(0, 20_000));
   } catch (e) { throw new Error(`Could not read ${url}: ${e instanceof Error ? e.message : e}`); }
-  if (!m.verificationToken || file.mandate_verification !== m.verificationToken) throw new Error(`${url} does not contain this store's verification token yet`);
+  // The caller must be the registrant, or hold a token of their own for this store.
+  const [claim] = m.registeredBy === userId ? [] : await db.select().from(merchantClaims).where(and(eq(merchantClaims.merchantId, m.id), eq(merchantClaims.userId, userId)));
+  const expected = m.registeredBy === userId ? m.verificationToken : claim?.token ?? null;
+  if (!expected) throw new Error("Register this store's address from this browser first, to get an ownership token");
+  if (file.mandate_verification !== expected) throw new Error(`${url} does not contain the ownership token issued to this browser yet`);
   const payee = { paypalMerchantId: file.paypal?.merchant_id?.slice(0, 40) || null, paypalEmail: file.paypal?.email?.slice(0, 120) || null };
   if (!payee.paypalMerchantId && !payee.paypalEmail) throw new Error("The file must name the store's PayPal account under paypal.merchant_id or paypal.email");
   // Callback URLs must live under the store's own verified base URL.
   const under = (v: string | undefined) => (typeof v === "string" && (v === m.baseUrl || v.startsWith(`${m.baseUrl}/`)) ? v : null);
   const [row] = await db.update(merchants).set({ ...payee, name: (file.name ?? m.name).slice(0, 80), ordersUrl: under(file.orders_url), returnsUrl: under(file.returns_url), catalogUrl: under(file.catalog_url),
+    // Whoever published their token is the registrant from now on.
+    registeredBy: userId, verificationToken: expected,
     // A store may take reserved payments only if it can be told about orders, since that is how it learns to ship and to release.
     supportsHold: file.holds === true && !!under(file.orders_url), domainVerifiedAt: new Date() })
     .where(eq(merchants.id, m.id)).returning();
-  await append({ userId, type: "merchant.verified", payload: { merchantId: m.id, baseUrl: m.baseUrl, name: row.name, payee } });
+  await db.delete(merchantClaims).where(eq(merchantClaims.merchantId, m.id));
+  await append({ userId, type: "merchant.verified", payload: { merchantId: m.id, baseUrl: m.baseUrl, name: row.name, payee, ...(claim ? { registrantChanged: true } : {}) } });
   return row;
 }
 
@@ -100,11 +123,16 @@ export async function removeMerchant(merchantId: string) {
 export async function listMerchants(userId?: string) {
   await ensureSeed();
   const rows = await db.select().from(merchants).orderBy(desc(merchants.verified), merchants.name);
+  const claims = userId ? await db.select().from(merchantClaims).where(eq(merchantClaims.userId, userId)) : [];
+  const claimFor = (id: string) => claims.find((c) => c.merchantId === id)?.token ?? null;
   return rows.map((m) => ({
     id: m.id, name: m.name, baseUrl: m.baseUrl, source: m.source,
     trust: m.verified ? ("verified" as const) : m.source === "builtin" || m.domainVerifiedAt ? ("registered" as const) : ("pending" as const),
     payable: (m.source === "builtin" || !!m.domainVerifiedAt) && !!(m.paypalMerchantId || m.paypalEmail),
-    verificationToken: m.domainVerifiedAt || !userId || m.registeredBy !== userId ? null : m.verificationToken, registeredByMe: !!userId && m.registeredBy === userId, wellKnownUrl: m.source === "onboarded" ? `${m.baseUrl}${WELL_KNOWN}` : null,
+    verificationToken: !userId ? null : m.registeredBy === userId ? (m.domainVerifiedAt ? null : m.verificationToken) : claimFor(m.id),
+    registeredByMe: !!userId && m.registeredBy === userId,
+    /** This browser has asked to manage a store someone else registered, and has not yet published its token. */
+    claiming: !!userId && m.registeredBy !== userId && !!claimFor(m.id), wellKnownUrl: m.source === "onboarded" ? `${m.baseUrl}${WELL_KNOWN}` : null,
     domainVerifiedAt: m.domainVerifiedAt?.toISOString() ?? null, createdAt: m.createdAt.toISOString(),
   }));
 }

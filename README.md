@@ -51,7 +51,7 @@ A prompt injection can change what an agent asks for. It cannot raise a limit, c
 - **Approval links.** A purchase that needs approval carries a secret link the agent can hand to the user, who approves or declines from their phone without opening the dashboard.
 - **Notifications.** The user can give one webhook (Slack, Discord, ntfy or their own) that hears about approvals needed, blocked purchases, paused agents and merchant offers.
 - **Checked mandates.** The rules a model drafts from the user's words are checked against those words in code before the user sees them: a store rule or a gift-card category the user never wrote is removed, limits above the budget are lowered, and a missing budget, mixed currencies or a missing product category become questions the user must answer. The check runs again at confirmation. "Never buy from X" in any one mandate holds for all of them.
-- **Charge on shipment.** A user can choose to be charged only when the store ships. PayPal reserves the money at purchase (an authorization), the gateway captures it when the store reports the shipment, and until then the buyer can cancel and the store releases the reservation.
+- **Charge on shipment.** A user can choose to be charged only when the store ships. PayPal reserves the money at purchase (an authorization), the gateway captures it when the store reports the shipment, and until then the buyer can cancel and the store releases the reservation. A reservation the store has not shipped after three days is released automatically, by a daily job and whenever the buyer's dashboard loads.
 - **Checked against PayPal.** Any purchase can be compared, fact by fact, with PayPal's own record of the order: amount, payee, capture or reservation state, refunds.
 - **Guided mandates.** A mandate can be built from a few choices (budget, what, which stores, when to ask) instead of written. Before confirming, the user sees made-up purchases run through the real policy engine: what would be paid, what would ask first, what would be blocked.
 - **Demo wallet.** The operator can lend one sandbox buyer to visitors who have no PayPal sandbox account. It is shared, so mandates that spend from it are capped at $200 and all demo spending is capped per day.
@@ -84,7 +84,7 @@ Stores join in the merchant portal (`/for-merchants`), which is separate from a 
 | Registered | The store serves one JSON file at `<store URL>/.well-known/mandate-merchant.json` with the token the gateway issued, its name and its PayPal payee, and the gateway reads it. | Purchases under mandates that name the store or accept any registered store. |
 | Verified | The gateway's operator reviews the store and grants it at `/operator` (opened with `OPERATOR_KEY`). A store cannot give it to itself. | Purchases under mandates that say "known merchants only". |
 
-The file can also say where to send paid orders and return requests. The gateway refuses private addresses, requires https, and only accepts callback URLs under the store's own address. Operator decisions are written to the signed ledger.
+A store is managed from the browser that proved it owns the site, and that browser sees the store's agent sales report. On a new browser the seller registers the same address again, gets a token of their own, and publishing it moves the store to that browser. The file can also say where to send paid orders and return requests, where the catalogue is, and whether the store accepts reserved payments. The gateway refuses private addresses, requires https, and only accepts callback URLs under the store's own address. Operator decisions are written to the signed ledger.
 
 Two demo shops live outside this repository, each with its own deployment, and join the same way any outside merchant would: [Tidewater Coffee Roasters](https://tidewater-coffee-pi.vercel.app) ([source](https://github.com/Bhaskar422/tidewater-coffee)) and [Fern & Field](https://fern-and-field.vercel.app) ([source](https://github.com/Bhaskar422/fern-and-field)).
 
@@ -190,7 +190,6 @@ Stack: Next.js 15, TypeScript, PostgreSQL with Drizzle, the Model Context Protoc
 
 ## Limits of this build
 
-- **A reservation is not released automatically.** If a store never ships and the buyer never cancels, the hold stays until PayPal expires it (the sandbox reported about 29 days).
 - **Sandbox only.** It has never run against live PayPal. Paying a third-party merchant from a vaulted wallet works in the sandbox as built; in production we expect it to need PayPal's partner onboarding for each merchant.
 - **The demo merchants live in the same app as the gateway.** They talk to it over HTTP and verify its signatures, but they share its database and deployment. The third store, Peak, borrows Stride's sandbox PayPal account.
 - **The page scanner is a set of patterns.** It catches the common phrasings of injected instructions, not every possible one. It is a second line behind the limits, which do not depend on it.
@@ -199,6 +198,7 @@ Stack: Next.js 15, TypeScript, PostgreSQL with Drizzle, the Model Context Protoc
 - **The sandbox has no human reviewer**, so the final ruling in the dispute demo is triggered with PayPal's sandbox-only `adjudicate` call.
 - **A dashboard is an anonymous cookie until PayPal is linked.** After that the PayPal account identifies it. There is no second factor beyond PayPal's own login.
 - **The built-in assistant calls the gateway's functions in-process** rather than over HTTP with a key. It passes through the same policy checks, but not the network path an outside agent uses.
-- **A merchant fetches the evidence record by presenting the PayPal capture ID**, which is weaker than real merchant authentication.
+- **A merchant fetches the evidence record by presenting the PayPal capture ID**, which is weaker than real merchant authentication. The same goes for reporting a shipment, which presents the authorization ID.
+- **A seller has no login.** A store is tied to the browser that last proved ownership of its site.
 
 MIT licensed.

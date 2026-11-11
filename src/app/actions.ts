@@ -11,7 +11,7 @@ import { clearDemoWallet, DEMO_MANDATE_CAP_CENTS, isDemoUser, setDemoWalletFromU
 import { draftMandate } from "@/lib/llm";
 import { reviewDraft, type MandateQuestion } from "@/lib/mandate-check";
 import { mandateExamples, type MandateExample } from "@/lib/mandate-examples";
-import { registerMerchant, removeMerchant, setMerchantVerified, verifyMerchantDomain } from "@/lib/merchants";
+import { ownershipToken, registerMerchant, removeMerchant, setMerchantVerified, verifyMerchantDomain } from "@/lib/merchants";
 import { reconcilePurchase, type ReconcileRow } from "@/lib/reconcile";
 import { operatorSignIn, operatorSignOut, requireOperator } from "@/lib/operator";
 import { MandateRulesSchema, type MandateRules } from "@/lib/rules";
@@ -131,11 +131,14 @@ export async function answerOfferAction(caseId: string, accept: boolean): Promis
 
 // ---- Merchants --------------------------------------------------------------------------------
 
-export async function registerMerchantAction(url: string): Promise<R<{ merchantId: string; token: string | null; wellKnownUrl: string }>> {
+export async function registerMerchantAction(url: string): Promise<R<{ merchantId: string; token: string | null; claiming: boolean; wellKnownUrl: string }>> {
   try {
-    const m = await registerMerchant(await currentUserId(), url);
+    const userId = await currentUserId();
+    const m = await registerMerchant(userId, url);
+    // A token is only ever handed to the browser it was issued to.
+    const own = await ownershipToken(userId, m);
     revalidatePath("/", "layout");
-    return { ok: true, merchantId: m.id, token: m.domainVerifiedAt ? null : m.verificationToken, wellKnownUrl: `${m.baseUrl}/.well-known/mandate-merchant.json` };
+    return { ok: true, merchantId: m.id, token: own.token, claiming: own.claiming, wellKnownUrl: `${m.baseUrl}/.well-known/mandate-merchant.json` };
   } catch (e) { return fail(e); }
 }
 export async function verifyMerchantAction(merchantId: string): Promise<R<{ name: string }>> {
