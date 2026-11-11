@@ -6,6 +6,7 @@ import { restartAssistantAction } from "@/app/actions";
 import type { AssistantEvent } from "@/lib/assistant";
 import { useAccount } from "../AccountProvider";
 import DemoWalletButton from "../DemoWalletButton";
+import DecisionReveal from "../purchases/DecisionReveal";
 import Banner from "../ui/Banner";
 import Button from "../ui/Button";
 import { PageHeader } from "../ui/Layout";
@@ -22,7 +23,20 @@ const IDEAS = [
   { label: "Check what is allowed", text: "What am I allowing you to buy, and how much is left?" },
 ];
 
-function StepRow({ s }: { s: Step }) {
+/**
+ * The gateway's decision on one purchase, check by check. A step that finished in this visit plays the reveal once and
+ * folds to its summary; one restored from an earlier visit starts folded. The checks arrive with the next account refresh.
+ */
+function StepDecision({ purchaseId, live }: { purchaseId: string; live: boolean }) {
+  const { state } = useAccount();
+  const p = state.purchases.find((x) => x.id === purchaseId);
+  const [waited, setWaited] = useState(false);
+  useEffect(() => { if (p) return; const t = setTimeout(() => setWaited(true), 12_000); return () => clearTimeout(t); }, [p]);
+  if (!p) return live && !waited ? <p className="flex items-center gap-2 text-sm text-ink-3" role="status"><LoaderCircle size={13} className="spin" aria-hidden />Reading the gateway&apos;s checks</p> : null;
+  return <DecisionReveal checks={p.checks} outcome={p.outcome} status={p.status} reason={p.reason} autoPlay={live} collapseAfter replayLabel="Replay" />;
+}
+
+function StepRow({ s, decision, live }: { s: Step; decision: boolean; live: boolean }) {
   const icon = !s.summary ? <LoaderCircle size={14} className="spin" aria-hidden />
     : s.tone === "ok" ? <Check size={14} aria-hidden /> : s.tone === "bad" ? <Ban size={14} aria-hidden /> : s.tone === "warn" ? <Clock size={14} aria-hidden /> : <Check size={14} aria-hidden />;
   return (
@@ -38,6 +52,7 @@ function StepRow({ s }: { s: Step }) {
           <Link href={`/purchases/${s.purchaseId}`} className="btn btn-secondary btn-sm">Open the record</Link>
         </span>
       )}
+      {s.purchaseId && decision && <div className="mt-1 basis-full border-t border-line pt-2.5 empty:hidden"><StepDecision purchaseId={s.purchaseId} live={live} /></div>}
     </li>
   );
 }
@@ -51,6 +66,8 @@ export default function Chat() {
   const [left, setLeft] = useState(state.assistant.remaining);
   const end = useRef<HTMLDivElement>(null);
   const restart = useAction(restartAssistantAction);
+  // Steps that finished while this page was open: only those play the decision reveal.
+  const live = useRef(new Set<string>());
 
   // The conversation survives moving between pages, for this browser tab only.
   useEffect(() => { try { const s = sessionStorage.getItem(STORE_KEY); if (s) setMsgs(JSON.parse(s)); } catch { /* no storage */ } }, []);
@@ -78,7 +95,7 @@ export default function Chat() {
     const apply = (e: AssistantEvent) => {
       if (e.type === "text") patch((m) => { m.text += e.delta; });
       else if (e.type === "step") patch((m) => { if (m.text && !m.text.endsWith("\n")) m.text += "\n\n"; m.steps.push({ id: e.id, label: e.label }); });
-      else if (e.type === "step_done") { patch((m) => { const s = m.steps.find((x) => x.id === e.id); if (s) Object.assign(s, { summary: e.summary, tone: e.tone, purchaseId: e.purchaseId, approvalUrl: e.approvalUrl }); }); refresh(); }
+      else if (e.type === "step_done") { if (e.purchaseId) live.current.add(e.id); patch((m) => { const s = m.steps.find((x) => x.id === e.id); if (s) Object.assign(s, { summary: e.summary, tone: e.tone, purchaseId: e.purchaseId, approvalUrl: e.approvalUrl }); }); refresh(); }
       else if (e.type === "error") patch((m) => { m.error = e.message; });
       else if (e.type === "done") setLeft(e.remaining);
     };
@@ -104,6 +121,10 @@ export default function Chat() {
       setBusy(false); refresh();
     }
   }, [busy, msgs, refresh]);
+
+  // A purchase can be named by several steps (bought, then looked up). Its decision is shown once, on the first.
+  const decisionSteps = new Set<string>(), decided = new Set<string>();
+  for (const m of msgs) if (m.role === "assistant") for (const s of m.steps) if (s.purchaseId && !decided.has(s.purchaseId)) { decided.add(s.purchaseId); decisionSteps.add(s.id); }
 
   const blocked = revoked || !state.llm || left <= 0;
   return (
@@ -148,7 +169,7 @@ export default function Chat() {
             <div key={i} className="flex items-start gap-3">
               <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-full bg-brand-soft text-brand-ink"><Sparkles size={15} aria-hidden /></span>
               <div className="min-w-0 flex-1 space-y-3">
-                {m.steps.length > 0 && <ul className="space-y-2 rounded-lg border border-line bg-raised px-3.5 py-3">{m.steps.map((s) => <StepRow key={s.id} s={s} />)}</ul>}
+                {m.steps.length > 0 && <ul className="space-y-2 rounded-lg border border-line bg-raised px-3.5 py-3">{m.steps.map((s) => <StepRow key={s.id} s={s} decision={decisionSteps.has(s.id)} live={live.current.has(s.id)} />)}</ul>}
                 {m.text && <p className="whitespace-pre-wrap text-base text-ink [overflow-wrap:anywhere]">{m.text.trim()}</p>}
                 {!m.text && !m.steps.length && !m.error && <p className="flex items-center gap-2 text-sm text-ink-3"><LoaderCircle size={14} className="spin" aria-hidden />Thinking</p>}
                 {m.error && <p role="alert" className="tone-bad tone-text text-sm font-medium">{m.error}</p>}
