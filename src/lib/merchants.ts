@@ -61,6 +61,39 @@ export async function verifyMerchantDomain(userId: string, merchantId: string) {
   return row;
 }
 
+// ---- Operator review ---------------------------------------------------------------------------
+
+/** Ledger entries for decisions made by the gateway's operator are filed under this id, not under any user. */
+export const OPERATOR_USER = "usr_gateway_operator";
+const operatorRow = () => db.insert(schema.users).values({ id: OPERATOR_USER }).onConflictDoNothing();
+
+/**
+ * "Verified" is the operator's judgement that a store is who it says it is and is fit to be paid under mandates
+ * that say "known merchants only". Proving a domain does not grant it; only this does.
+ */
+export async function setMerchantVerified(merchantId: string, verified: boolean) {
+  const [m] = await db.select().from(merchants).where(eq(merchants.id, merchantId));
+  if (!m) throw new Error("Merchant not found");
+  if (verified && m.source === "onboarded" && !m.domainVerifiedAt) throw new Error("This store has not proved it controls its website yet");
+  if (verified && !m.paypalMerchantId && !m.paypalEmail) throw new Error("This store has no PayPal payee on file");
+  const [row] = await db.update(merchants).set({ verified }).where(eq(merchants.id, merchantId)).returning();
+  await operatorRow();
+  await append({ userId: OPERATOR_USER, type: "merchant.reviewed", payload: { merchantId, baseUrl: m.baseUrl, name: m.name, verified } });
+  return row;
+}
+
+/** Take a store out of the registry. A store that has been paid stays, so its purchase records keep their merchant. */
+export async function removeMerchant(merchantId: string) {
+  const [m] = await db.select().from(merchants).where(eq(merchants.id, merchantId));
+  if (!m) throw new Error("Merchant not found");
+  if (m.source === "builtin") throw new Error("The demo stores that ship with the gateway cannot be removed");
+  const [used] = await db.select({ id: schema.purchases.id }).from(schema.purchases).where(eq(schema.purchases.merchantId, merchantId)).limit(1);
+  if (used) throw new Error("This store has purchases on record, so it cannot be removed. Withdraw its verified status instead.");
+  await db.delete(merchants).where(eq(merchants.id, merchantId));
+  await operatorRow();
+  await append({ userId: OPERATOR_USER, type: "merchant.removed", payload: { merchantId, baseUrl: m.baseUrl, name: m.name } });
+}
+
 /** The registry. A pending store's verification token is shown only to the user who registered it. */
 export async function listMerchants(userId?: string) {
   await ensureSeed();
@@ -70,6 +103,6 @@ export async function listMerchants(userId?: string) {
     trust: m.verified ? ("verified" as const) : m.source === "builtin" || m.domainVerifiedAt ? ("registered" as const) : ("pending" as const),
     payable: (m.source === "builtin" || !!m.domainVerifiedAt) && !!(m.paypalMerchantId || m.paypalEmail),
     verificationToken: m.domainVerifiedAt || !userId || m.registeredBy !== userId ? null : m.verificationToken, registeredByMe: !!userId && m.registeredBy === userId, wellKnownUrl: m.source === "onboarded" ? `${m.baseUrl}${WELL_KNOWN}` : null,
-    domainVerifiedAt: m.domainVerifiedAt?.toISOString() ?? null,
+    domainVerifiedAt: m.domainVerifiedAt?.toISOString() ?? null, createdAt: m.createdAt.toISOString(),
   }));
 }

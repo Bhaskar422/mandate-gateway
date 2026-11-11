@@ -68,7 +68,17 @@ The REST API is described at `/api/v1/openapi.json`. Two endpoints are public: `
 
 ## For merchants
 
-A store joins by serving one JSON file at `<store URL>/.well-known/mandate-merchant.json`: the verification token the gateway issued, its name, its PayPal payee, and optionally where to send paid orders and return requests. The gateway refuses private addresses, requires https, and only accepts callback URLs under the store's own verified URL. A registered store can be paid under a mandate that allows any registered merchant or names it; "known merchants only" still means the gateway's own verified list.
+Stores join in the merchant portal (`/for-merchants`), which is separate from a shopper's dashboard and needs no account. A store has one of three standings:
+
+| Standing | How a store gets it | What it allows |
+|---|---|---|
+| Ownership not proved | Someone enters the store's address. | Nothing. It cannot be paid. |
+| Registered | The store serves one JSON file at `<store URL>/.well-known/mandate-merchant.json` with the token the gateway issued, its name and its PayPal payee, and the gateway reads it. | Purchases under mandates that name the store or accept any registered store. |
+| Verified | The gateway's operator reviews the store and grants it at `/operator` (opened with `OPERATOR_KEY`). A store cannot give it to itself. | Purchases under mandates that say "known merchants only". |
+
+The file can also say where to send paid orders and return requests. The gateway refuses private addresses, requires https, and only accepts callback URLs under the store's own address. Operator decisions are written to the signed ledger.
+
+Two demo shops live outside this repository, each with its own deployment, and join the same way any outside merchant would: [Tidewater Coffee Roasters](https://tidewater-coffee-pi.vercel.app) ([source](https://github.com/Bhaskar422/tidewater-coffee)) and [Fern & Field](https://fern-and-field.vercel.app) ([source](https://github.com/Bhaskar422/fern-and-field)).
 
 ## Architecture
 
@@ -107,7 +117,7 @@ For one purchase the record holds the mandate text and rules hash, the user's re
 1. Open https://mandate-gateway.vercel.app and click **Link PayPal**. Log in with a US PayPal sandbox personal account.
 2. Write a mandate, click **Turn into rules**, check them and **Confirm mandate**.
 3. Open **Assistant** and ask it to buy running shoes. That is the quickest way to see a purchase paid, held for approval or blocked.
-4. To use your own agent instead, click **Connect an agent**. The key screen has ready-made setup for Claude Desktop, Claude Code (one command), Cursor (one click), any other MCP client, and plain REST. It adds the gateway and the demo stores' catalogues.
+4. To use your own agent instead, click **Connect an agent**. The key screen has ready-made setup for ChatGPT, Claude Code, Claude Desktop, Codex CLI, Cursor, Gemini CLI, VS Code, any other MCP client, and plain REST. It adds the gateway and the demo stores' catalogues.
 
 The demo stores are at `/stores/stride` (verified), `/stores/kickz` (not verified) and `/stores/peak` (unknown to the gateway until it registers). Each has a back office at `/stores/<name>/admin` where you can ship an order correctly or ship the wrong item.
 
@@ -138,7 +148,7 @@ The end-to-end script drives the gateway as an agent would. It covers the approv
 - [`src/lib/policy.ts`](src/lib/policy.ts): the policy engine (pure, deterministic)
 - [`src/lib/risk.ts`](src/lib/risk.ts): the page scanner for text aimed at AI agents
 - [`src/lib/gateway.ts`](src/lib/gateway.ts): purchase, approval, payment, settlement and account flows
-- [`src/lib/merchants.ts`](src/lib/merchants.ts): merchant registration and domain verification
+- [`src/lib/merchants.ts`](src/lib/merchants.ts): merchant registration, proof of ownership and operator review
 - [`src/lib/agent-api.ts`](src/lib/agent-api.ts): what agents see, shared by the MCP server and the REST API ([`src/app/api/v1`](src/app/api/v1))
 - [`src/lib/ledger.ts`](src/lib/ledger.ts): the evidence ledger
 - [`src/lib/paypal.ts`](src/lib/paypal.ts): Vault, Orders, refunds, Disputes, webhook verification

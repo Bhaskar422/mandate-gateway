@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { cookies } from "next/headers";
 import { db, schema } from "./db";
 
@@ -10,3 +11,6 @@ export async function currentUserId(): Promise<string> {
   await db.insert(schema.users).values({ id }).onConflictDoNothing();
   return id;
 }
+
+/** A fresh anonymous session id, in the same shape the middleware issues. */
+export const newSessionId = () => `usr_${randomBytes(18).toString("base64url")}`;

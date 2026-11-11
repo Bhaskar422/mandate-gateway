@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { claudeCodeCommands, curlPurchase, KEY_PLACEHOLDER, mcpCommand, mcpConfig, storeServers } from "@/components/agents/snippets";
+import AgentSetup from "@/components/agents/AgentSetup";
+import { curlPurchase, KEY_PLACEHOLDER } from "@/components/agents/snippets";
 import ResultsMatrix from "@/components/public/ResultsMatrix";
 import PublicShell from "@/components/shell/PublicShell";
 import { Badge } from "@/components/ui/Badge";
@@ -71,15 +72,10 @@ export default function DevelopersPage() {
           <p className="max-w-3xl text-base text-ink-2">
             The gateway is a remote MCP server at <span className="code">{base}/api/mcp</span>. Authenticate with an agent key as a bearer token; create one on the <Link href="/agents?new=1" className="link">Agents page</Link>, which also shows this setup with your key filled in.
           </p>
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            <CodeBlock label="Claude Desktop config" code={mcpConfig(base, KEY_PLACEHOLDER)} />
-            <CodeBlock label="Claude Code" code={claudeCodeCommands(base, KEY_PLACEHOLDER)} wrap />
-            <div className="min-w-0 space-y-4">
-              <CodeBlock label="Any MCP client that runs a command" code={mcpCommand(base, KEY_PLACEHOLDER)} wrap />
-              <CodeBlock label="Demo store catalogues (no key)" code={storeServers(base).map((s) => `${s.url}   # ${s.name}`).join("\n")} />
-              <p className="text-sm text-ink-3">Each demo store has its own catalogue server with <span className="code">search_products</span> and <span className="code">get_product</span>. It is the store&apos;s server, so the gateway treats whatever it returns as untrusted.</p>
-            </div>
+          <div className="card p-4 sm:p-5">
+            <AgentSetup appUrl={base} agentKey={KEY_PLACEHOLDER} />
           </div>
+          <p className="max-w-3xl text-sm text-ink-3">Each demo store has its own catalogue server with <span className="code">search_products</span> and <span className="code">get_product</span>. It is the store&apos;s server, not the gateway&apos;s, so whatever it returns is untrusted as far as the gateway is concerned.</p>
           <div className="card divide-y divide-line">
             {TOOLS.map((t) => (
               <div key={t.name} className="grid gap-1 p-4 sm:grid-cols-[190px_minmax(0,1fr)] sm:gap-4">

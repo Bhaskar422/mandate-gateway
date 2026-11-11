@@ -17,6 +17,7 @@ export default function PublicShell({ children, width = "max-w-[960px]", nav = t
               <Link href="/" className="btn btn-quiet btn-sm">Dashboard</Link>
               <Link href="/verify" className="btn btn-quiet btn-sm max-sm:!hidden">Verify a record</Link>
               <Link href="/developers" className="btn btn-quiet btn-sm">Developers</Link>
+              <Link href="/for-merchants" className="btn btn-quiet btn-sm max-sm:!hidden">For merchants</Link>
             </>}
             <ThemeToggle />
           </nav>

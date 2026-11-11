@@ -100,7 +100,7 @@ function Alerts() {
 
 function SignOut() {
   const { state } = useAccount();
-  const out = useAction(signOutAction);
+  const [pending, setPending] = useState(false);
   return (
     <div className="card flex flex-wrap items-center justify-between gap-4 p-5 sm:p-6">
       <div className="max-w-xl">
@@ -110,10 +110,9 @@ function SignOut() {
             ? "Your account stays as it is. To come back, on this or any browser, link the same PayPal account and you are signed in to it again."
             : "You have not linked PayPal, so nothing identifies this account yet. If you sign out now, this dashboard cannot be recovered."}
         </p>
-        <ErrorText>{out.error}</ErrorText>
       </div>
-      <ConfirmButton variant="secondary" question={state.paypal ? "Sign out of this browser?" : "This account cannot be recovered. Sign out anyway?"} confirmLabel="Sign out" loading={out.pending} icon={<LogOut size={14} aria-hidden />}
-        onConfirm={async () => { if (await out.run()) window.location.assign("/"); }}>Sign out</ConfirmButton>
+      <ConfirmButton variant="secondary" question={state.paypal ? "Sign out of this browser?" : "This account cannot be recovered. Sign out anyway?"} confirmLabel="Sign out" loading={pending} icon={<LogOut size={14} aria-hidden />}
+        onConfirm={async () => { setPending(true); await signOutAction(); }}>Sign out</ConfirmButton>
     </div>
   );
 }

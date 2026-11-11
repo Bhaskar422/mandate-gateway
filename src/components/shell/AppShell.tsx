@@ -49,6 +49,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const more: Item[] = [
     { href: "/verify", label: "Verify a record", icon: <FileCheck2 size={17} aria-hidden /> },
     { href: "/developers", label: "Developers", icon: <Code2 size={17} aria-hidden /> },
+    { href: "/for-merchants", label: "For merchants", icon: <Store size={17} aria-hidden /> },
     { href: "/stores/stride", label: "Demo stores", icon: <ShoppingBag size={17} aria-hidden /> },
   ];
 

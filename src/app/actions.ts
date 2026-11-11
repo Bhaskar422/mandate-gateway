@@ -2,14 +2,17 @@
 // Every mutation the web app can make. Each one resolves the signed-in user itself; none trusts a user id from the client.
 import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
 import { restartAssistant } from "@/lib/assistant";
 import type { UserSettings } from "@/lib/db/schema";
 import { answerOffer, confirmMandate, createAgent, decideApproval, decideByToken, pauseAgent, reportProblem, resolveMerchantNames, resumeAgent, revokeAgent, revokeMandate, rotateAgentKey, setFrozen, updateSettings } from "@/lib/gateway";
 import { publicKeyPem, verifyBundle, type LedgerRow } from "@/lib/ledger";
 import { compileMandate } from "@/lib/llm";
-import { registerMerchant, verifyMerchantDomain } from "@/lib/merchants";
+import { registerMerchant, removeMerchant, setMerchantVerified, verifyMerchantDomain } from "@/lib/merchants";
+import { operatorSignIn, operatorSignOut, requireOperator } from "@/lib/operator";
 import { MandateRulesSchema, type MandateRules } from "@/lib/rules";
-import { currentUserId, SESSION_COOKIE } from "@/lib/session";
+import { currentUserId, newSessionId, SESSION_COOKIE, sessionCookieOptions } from "@/lib/session";
+import { appUrl } from "@/lib/config";
 import { publishVerificationToken, sandboxRuling, shipOrder, syncDisputes } from "@/lib/stores/merchant";
 
 type R<T = object> = ({ ok: true } & T) | { ok: false; error: string };
@@ -62,8 +65,14 @@ export async function rotateAgentKeyAction(agentId: string): Promise<R<{ key: st
 export async function setFrozenAction(frozen: boolean): Promise<R> { try { await setFrozen(await currentUserId(), frozen); return done(); } catch (e) { return fail(e); } }
 export async function updateSettingsAction(patch: UserSettings): Promise<R> { try { await updateSettings(await currentUserId(), patch); return done(); } catch (e) { return fail(e); } }
 
-/** Forget this browser's session. The account itself stays, and linking the same PayPal account brings it back. */
-export async function signOutAction(): Promise<R> { try { (await cookies()).delete(SESSION_COOKIE); return done(); } catch (e) { return fail(e); } }
+/**
+ * Forget this browser's session. The account itself stays, and linking the same PayPal account brings it back.
+ * The browser is handed a new anonymous session in the same response, so it never renders a page with no session.
+ */
+export async function signOutAction(): Promise<never> {
+  (await cookies()).set(SESSION_COOKIE, newSessionId(), sessionCookieOptions(appUrl().startsWith("https:")));
+  redirect("/");
+}
 /** Start a new built-in shopping assistant after the last one was revoked. */
 export async function restartAssistantAction(): Promise<R> { try { await restartAssistant(await currentUserId()); return done(); } catch (e) { return fail(e); } }
 
@@ -94,6 +103,18 @@ export async function registerMerchantAction(url: string): Promise<R<{ merchantI
 }
 export async function verifyMerchantAction(merchantId: string): Promise<R<{ name: string }>> {
   try { const m = await verifyMerchantDomain(await currentUserId(), merchantId); revalidatePath("/", "layout"); return { ok: true, name: m.name }; } catch (e) { return fail(e); }
+}
+
+// ---- Operator (the people who run this gateway) -----------------------------------------------
+
+export async function operatorSignInAction(key: string): Promise<R> { try { await operatorSignIn(key); return done(); } catch (e) { return fail(e); } }
+export async function operatorSignOutAction(): Promise<R> { try { await operatorSignOut(); return done(); } catch (e) { return fail(e); } }
+/** Grant or withdraw a store's verified status. */
+export async function reviewMerchantAction(merchantId: string, verified: boolean): Promise<R> {
+  try { await requireOperator(); await setMerchantVerified(merchantId, verified); return done(); } catch (e) { return fail(e); }
+}
+export async function removeMerchantAction(merchantId: string): Promise<R> {
+  try { await requireOperator(); await removeMerchant(merchantId); return done(); } catch (e) { return fail(e); }
 }
 
 // ---- Evidence ---------------------------------------------------------------------------------

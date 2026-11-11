@@ -114,7 +114,9 @@ export const LEDGER: Record<string, { title: string; tone: Tone }> = {
   "account.frozen": { title: "Spending frozen", tone: "bad" },
   "account.unfrozen": { title: "Spending unfrozen", tone: "ok" },
   "merchant.registered": { title: "Store registered", tone: "neutral" },
-  "merchant.verified": { title: "Store proved its domain", tone: "ok" },
+  "merchant.verified": { title: "Store proved it owns its website", tone: "ok" },
+  "merchant.reviewed": { title: "Operator reviewed a store", tone: "neutral" },
+  "merchant.removed": { title: "Operator removed a store", tone: "neutral" },
 };
 export const ledgerEntry = (type: string) => LEDGER[type] ?? { title: type, tone: "neutral" as Tone };
 

@@ -35,6 +35,27 @@ export const cursorConfig = (appUrl: string, key: string) => JSON.stringify({
   },
 }, null, 2);
 
+const servers = (appUrl: string) => [{ name: "mandate", url: `${appUrl}/api/mcp`, auth: true }, ...STORES.map((s) => ({ name: `${s.slug}-store`, url: `${appUrl}/stores/${s.slug}/mcp`, auth: false }))];
+const bearer = (key: string) => ({ Authorization: `Bearer ${key}` });
+
+/** VS Code (GitHub Copilot): .vscode/mcp.json uses a top-level "servers" object. */
+export const vscodeConfig = (appUrl: string, key: string) => JSON.stringify({
+  servers: Object.fromEntries(servers(appUrl).map((s) => [s.name, { type: "http", url: s.url, ...(s.auth ? { headers: bearer(key) } : {}) }])),
+}, null, 2);
+export const vscodeCommand = (appUrl: string, key: string) => `code --add-mcp '${JSON.stringify({ name: "mandate", type: "http", url: `${appUrl}/api/mcp`, headers: bearer(key) })}'`;
+
+/** Gemini CLI: ~/.gemini/settings.json, remote servers under "httpUrl". */
+export const geminiConfig = (appUrl: string, key: string) => JSON.stringify({
+  mcpServers: Object.fromEntries(servers(appUrl).map((s) => [s.name, { httpUrl: s.url, ...(s.auth ? { headers: bearer(key) } : {}) }])),
+}, null, 2);
+
+/** Codex CLI: ~/.codex/config.toml. */
+export const codexConfig = (appUrl: string, key: string) => servers(appUrl).map((s) =>
+  `[mcp_servers.${s.name}]\nurl = "${s.url}"${s.auth ? `\nhttp_headers = { Authorization = "Bearer ${key}" }` : ""}`).join("\n\n");
+
+/** For clients that take only a URL: the gateway also accepts the key as a query parameter. */
+export const keyedUrl = (appUrl: string, key: string) => `${appUrl}/api/mcp?key=${key}`;
+
 export const storeServers = (appUrl: string) => STORES.map((s) => ({ name: s.name, url: `${appUrl}/stores/${s.slug}/mcp` }));
 
 export const curlPurchase = (appUrl: string, key: string) => `curl -X POST ${appUrl}/api/v1/purchases \\
