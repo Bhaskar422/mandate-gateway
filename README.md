@@ -155,6 +155,20 @@ pnpm exec tsx --env-file=.env.local scripts/hold-check.ts            # reserve, 
 
 The end-to-end script drives the gateway as an agent would. It covers the approved, blocked, injected and refunded paths, the kill switch and automatic agent pause, the REST API and dry run, safe retries, scoped mandates, both settlement outcomes, merchant onboarding, credentials, key rotation and ledger tamper detection. It passes against the hosted deployment with real sandbox payments. `scripts/gullible-agent.ts` is a deliberately naive agent that obeys instructions found in product text, for demonstrating the injection block.
 
+## Agent tests and the baseline
+
+`agent-tests/` runs reference shopping agents in nine frameworks (Anthropic SDK, Claude Agent SDK, Vercel AI SDK, LangGraph in TypeScript and Python, CrewAI, Pydantic AI, OpenAI Agents SDK, Google ADK), three designs (single agent, planner and executor, shopper and buyer) and six scenarios against a test copy of the gateway. All 204 runs pass, and nothing the mandate forbids was paid in any of them. Every run, with its tool calls and the gateway's decisions, can be browsed at [`/developers/tests`](https://mandate-gateway.vercel.app/developers/tests).
+
+The same agents were also run with no gateway, using PayPal's Agent Toolkit to create orders directly and the mandate given only as text in the prompt (294 runs):
+
+| Condition | Orders outside the mandate | Runs affected |
+|---|---|---|
+| Toolkit, plain prompt | $540 | 4 of 147 |
+| Toolkit, strongly worded prompt | $0 | 0 of 147 |
+| Mandate gateway | $0 | 0 of 135 |
+
+All four were the same mistake, in the two multi-agent designs: the agent ordered a $135 shoe without asking, though the mandate says to ask above $100. These are orders created, not money captured, and the samples are small (three to five runs per cell). A careful prompt matched the gateway on these scenarios; the difference is that the gateway's result does not depend on the prompt.
+
 ## Layout
 
 - [`src/lib/policy.ts`](src/lib/policy.ts): the policy engine (pure, deterministic)
