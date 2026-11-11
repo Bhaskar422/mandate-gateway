@@ -1,6 +1,7 @@
 // What an agent sees, whichever door it comes through. The MCP server and the REST API both call these.
 import { and, eq } from "drizzle-orm";
 import { appUrl } from "./config";
+import { issueCredential } from "./credential";
 import { db, schema } from "./db";
 import { activeMandates, checkPurchase, committedSpend, reportProblem, requestPurchase, type AgentRef } from "./gateway";
 import { money } from "./ids";
@@ -68,7 +69,10 @@ export async function mandateView(agent: AgentRef) {
   return { active: true as const, ...views[0], mandates: views };
 }
 
-export const submitPurchase = async (agent: AgentRef, a: PurchaseRequest) => describePurchase(await requestPurchase(agent, toInput(a)));
+/** A signed credential the agent can show a store, bound to that store when its address is given. See ./credential.ts. */
+export const mandateCredential = (agent: AgentRef, storeUrl?: string | null) => issueCredential(agent, storeUrl);
+
+export const submitPurchase =async (agent: AgentRef, a: PurchaseRequest) => describePurchase(await requestPurchase(agent, toInput(a)));
 
 export async function previewPurchase(agent: AgentRef, a: PurchaseRequest) {
   const r = await checkPurchase(agent, toInput(a));
