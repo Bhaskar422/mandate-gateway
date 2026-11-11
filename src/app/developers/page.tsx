@@ -2,12 +2,10 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import AgentSetup from "@/components/agents/AgentSetup";
 import { curlPurchase, KEY_PLACEHOLDER } from "@/components/agents/snippets";
-import BaselineComparison from "@/components/public/BaselineComparison";
 import ResultsMatrix from "@/components/public/ResultsMatrix";
 import PublicShell from "@/components/shell/PublicShell";
 import { Badge } from "@/components/ui/Badge";
 import { CodeBlock } from "@/components/ui/Copy";
-import { agentBaseline } from "@/data/agent-baseline";
 import { agentResults } from "@/data/agent-results";
 import { appUrl } from "@/lib/config";
 
@@ -158,7 +156,6 @@ export default function DevelopersPage() {
         <section aria-labelledby="results" className="space-y-4">
           <H2 id="results">Agent test results</H2>
           <p className="max-w-3xl text-base text-ink-2">The same scenarios, run through agents built on different frameworks and architectures against this gateway. The point is that the outcome does not depend on how well-behaved the agent is.</p>
-          <BaselineComparison baseline={agentBaseline} />
           <ResultsMatrix results={agentResults} />
         </section>
       </div>
