@@ -5,11 +5,12 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { restartAssistant } from "@/lib/assistant";
 import type { UserSettings } from "@/lib/db/schema";
-import { answerOffer, confirmMandate, createAgent, decideApproval, decideByToken, pauseAgent, reportProblem, resolveMerchantNames, resumeAgent, revokeAgent, revokeMandate, rotateAgentKey, setFrozen, updateSettings } from "@/lib/gateway";
+import { answerOffer, cancelHold, confirmMandate, createAgent, decideApproval, decideByToken, pauseAgent, reportProblem, resolveMerchantNames, resumeAgent, revokeAgent, revokeMandate, rotateAgentKey, setFrozen, updateSettings } from "@/lib/gateway";
 import { publicKeyPem, verifyBundle, type LedgerRow } from "@/lib/ledger";
 import { draftMandate } from "@/lib/llm";
 import { reviewDraft, type MandateQuestion } from "@/lib/mandate-check";
 import { registerMerchant, removeMerchant, setMerchantVerified, verifyMerchantDomain } from "@/lib/merchants";
+import { reconcilePurchase, type ReconcileRow } from "@/lib/reconcile";
 import { operatorSignIn, operatorSignOut, requireOperator } from "@/lib/operator";
 import { MandateRulesSchema, type MandateRules } from "@/lib/rules";
 import { currentUserId, newSessionId, SESSION_COOKIE, sessionCookieOptions } from "@/lib/session";
@@ -91,6 +92,14 @@ export async function restartAssistantAction(): Promise<R> { try { await restart
 
 export async function approvalAction(purchaseId: string, approve: boolean): Promise<R> {
   try { await decideApproval(await currentUserId(), purchaseId, approve); return done(); } catch (e) { return fail(e); }
+}
+/** Cancel a reserved purchase before the store ships it. Nothing is charged. */
+export async function cancelHoldAction(purchaseId: string): Promise<R> {
+  try { await cancelHold(await currentUserId(), purchaseId); return done(); } catch (e) { return fail(e); }
+}
+/** Compare the gateway's record of a purchase with PayPal's own record of the order. Changes nothing. */
+export async function reconcilePurchaseAction(purchaseId: string): Promise<R<{ rows: ReconcileRow[]; allMatch: boolean; checkedAt: string; note?: string }>> {
+  try { const r = await reconcilePurchase(await currentUserId(), purchaseId); return { ok: true, rows: r.rows, allMatch: r.ok, checkedAt: r.checkedAt, note: r.note }; } catch (e) { return fail(e); }
 }
 /** Approve or decline from the secret link, without a dashboard session. */
 export async function approveByTokenAction(token: string, approve: boolean): Promise<R<{ status: string }>> {

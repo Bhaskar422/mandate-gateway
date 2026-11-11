@@ -12,7 +12,7 @@ const needsYou = (p: PurchaseView) => p.status === "pending_approval" || p.case?
 const GROUPS: { key: string; label: string; match: (p: PurchaseView) => boolean }[] = [
   { key: "all", label: "All", match: () => true },
   { key: "needs_you", label: "Needs you", match: needsYou },
-  { key: "paid", label: "Paid", match: (p) => ["captured", "paying"].includes(p.status) },
+  { key: "paid", label: "Paid", match: (p) => ["captured", "authorized", "paying"].includes(p.status) },
   { key: "blocked", label: "Blocked", match: (p) => p.status === "blocked" },
   { key: "problems", label: "Refunds and problems", match: (p) => ["refund_requested", "refunded", "partially_refunded", "disputed"].includes(p.status) || !!p.case },
   { key: "not_completed", label: "Declined or failed", match: (p) => ["declined", "payment_failed"].includes(p.status) },

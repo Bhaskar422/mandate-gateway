@@ -7,7 +7,7 @@ import { append, evidenceBundle } from "./ledger";
 import { analyseProblem, classifyProduct } from "./llm";
 import { getUser } from "./gateway-user";
 import { notify, validNotifyUrl } from "./notify";
-import { PayPalError, payWithVault } from "./paypal";
+import { PayPalError, payWithVault, holdWithVault, captureHold } from "./paypal";
 import { best, evaluate, type Classification, type Decision } from "./policy";
 import { fetchProduct, type ProductSnapshot } from "./product";
 import { normalizeRules, type MandateRules, type MandateRulesInput } from "./rules";
@@ -15,7 +15,7 @@ import { STORES } from "./stores/catalog";
 
 const { purchases, mandates, merchants, paypalLinks, agents, cases, users } = schema;
 /** Purchases that count against a mandate's budget. Refunded money goes back to the budget. */
-const COMMITTED = ["pending_approval", "paying", "captured", "refund_requested", "partially_refunded", "disputed"] as const;
+const COMMITTED = ["pending_approval", "paying", "captured", "authorized", "refund_requested", "partially_refunded", "disputed"] as const;
 export const RATE_LIMIT_PER_MINUTE = 12;
 /** An agent is paused after this many blocked attempts inside the window. */
 export const AUTO_PAUSE = { blocked: 5, windowMinutes: 10 };
@@ -32,7 +32,7 @@ export const ensureSeed = () => (seeded ??= (async () => {
   for (const s of STORES.filter((x) => x.builtin !== false)) {
     const payee = storePayee(s.slug);
     const base = `${appUrl()}/stores/${s.slug}`;
-    const row = { name: s.name, baseUrl: base, verified: s.verified, paypalMerchantId: payee.merchantId, paypalEmail: payee.email, source: "builtin" as const, ordersUrl: `${base}/api/orders`, returnsUrl: `${base}/api/returns` };
+    const row = { name: s.name, baseUrl: base, verified: s.verified, paypalMerchantId: payee.merchantId, paypalEmail: payee.email, source: "builtin" as const, ordersUrl: `${base}/api/orders`, returnsUrl: `${base}/api/returns`, supportsHold: true };
     await db.insert(merchants).values({ id: `mer_${s.slug}`, ...row }).onConflictDoUpdate({ target: merchants.id, set: row });
   }
 })().catch((e) => { seeded = null; throw e; }));
@@ -249,7 +249,7 @@ export async function requestPurchase(agent: AgentRef, input: PurchaseInput) {
     // Without a key, only an identical request (same product, quantity and price seen) counts as a retry.
     if (input.expectedPriceCents === null) return null;
     const [p] = await t.select().from(purchases).where(and(eq(purchases.agentId, agent.id), eq(purchases.productUrl, input.productUrl), eq(purchases.quantity, input.quantity),
-      eq(purchases.expectedPriceCents, input.expectedPriceCents), inArray(purchases.status, ["paying", "pending_approval", "captured"]), gte(purchases.createdAt, new Date(Date.now() - 120_000)))).orderBy(desc(purchases.createdAt)).limit(1);
+      eq(purchases.expectedPriceCents, input.expectedPriceCents), inArray(purchases.status, ["paying", "pending_approval", "captured", "authorized"]), gte(purchases.createdAt, new Date(Date.now() - 120_000)))).orderBy(desc(purchases.createdAt)).limit(1);
     return p ?? null;
   };
   const existing = await dupe(db);
@@ -307,22 +307,40 @@ export async function pay(purchaseId: string) {
   const set = async (v: Partial<typeof purchases.$inferInsert>) => (await db.update(purchases).set({ ...v, updatedAt: new Date() }).where(eq(purchases.id, p.id)).returning())[0];
   try {
     const payee = process.env.PAYPAL_PAYEE_MODE === "platform" ? null : { merchantId: m.paypalMerchantId, email: m.paypalEmail };
-    const r = await payWithVault({
+    const order = {
       vaultId: link.vaultId!, amountCents: p.amountCents, currency: p.currency, referenceId: p.id, payee,
       description: `${p.product.name} from ${m.name}`, itemName: p.product.name, sku: p.product.sku, quantity: p.quantity, unitCents: p.product.priceCents,
-    });
+    };
+    const notifyStore = async (entry: unknown) => {
+      // Awaited, because a serverless host may stop the function as soon as the response is sent.
+      if (m.ordersUrl) await fetch(m.ordersUrl, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ entry }), signal: AbortSignal.timeout(15_000) })
+        .catch((e) => console.error("merchant order notification failed:", e));
+    };
+    const about = { amountCents: p.amountCents, currency: p.currency, merchant: { id: m.id, name: m.name, baseUrl: m.baseUrl }, sku: p.product.sku, productName: p.product.name, quantity: p.quantity };
+
+    // Charge on shipment: reserve the money now, take it only when the store says it has shipped.
+    const buyer = await getUser(p.userId);
+    if (buyer?.settings?.chargeOnShipment && m.supportsHold && m.ordersUrl) {
+      const h = await holdWithVault(order);
+      if (h.status !== "COMPLETED" || !h.authorizationId) {
+        await append({ userId: p.userId, purchaseId: p.id, type: "payment.failed", payload: { orderId: h.orderId, status: h.status, authorizationStatus: h.authorizationStatus } });
+        return set({ status: "payment_failed", paypalOrderId: h.orderId });
+      }
+      const entry = await append({ userId: p.userId, purchaseId: p.id, type: "payment.authorized", payload: { paypalOrderId: h.orderId, paypalAuthorizationId: h.authorizationId, expiresAt: h.expiresAt, ...about } });
+      const row = await set({ status: "authorized", paypalOrderId: h.orderId, paypalAuthorizationId: h.authorizationId });
+      await notifyStore(entry);
+      return row;
+    }
+
+    const r = await payWithVault(order);
     if (r.status !== "COMPLETED" || !r.captureId) {
       await append({ userId: p.userId, purchaseId: p.id, type: "payment.failed", payload: { orderId: r.orderId, status: r.status, captureStatus: r.captureStatus } });
       return set({ status: "payment_failed", paypalOrderId: r.orderId });
     }
-    const entry = await append({ userId: p.userId, purchaseId: p.id, type: "payment.captured", payload: {
-      paypalOrderId: r.orderId, paypalCaptureId: r.captureId, amountCents: p.amountCents, currency: p.currency,
-      merchant: { id: m.id, name: m.name, baseUrl: m.baseUrl }, sku: p.product.sku, productName: p.product.name, quantity: p.quantity } });
+    const entry = await append({ userId: p.userId, purchaseId: p.id, type: "payment.captured", payload: { paypalOrderId: r.orderId, paypalCaptureId: r.captureId, ...about } });
     const row = await set({ status: "captured", paypalOrderId: r.orderId, paypalCaptureId: r.captureId });
     // Tell the merchant it has a paid order to fulfil, with the signed capture record as proof.
-    // Awaited, because a serverless host may stop the function as soon as the response is sent.
-    if (m.ordersUrl) await fetch(m.ordersUrl, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ entry }), signal: AbortSignal.timeout(15_000) })
-      .catch((e) => console.error("merchant order notification failed:", e));
+    await notifyStore(entry);
     return row;
   } catch (e) {
     const detail = e instanceof PayPalError ? { status: e.status, issue: e.issue, debugId: e.debugId, body: e.body } : { message: String(e) };
@@ -330,6 +348,47 @@ export async function pay(purchaseId: string) {
     await append({ userId: p.userId, purchaseId: p.id, type: "payment.failed", payload: detail as Record<string, unknown> });
     return set({ status: "payment_failed" });
   }
+}
+
+/**
+ * The store says it has shipped a reserved order. The gateway takes the money now and returns the signed capture
+ * record. The store proves it is the right party by presenting the authorization id it was sent.
+ */
+export async function captureOnShipment(a: { purchaseId: string; authorizationId: string; tracking?: string | null }) {
+  const [p] = await db.select().from(purchases).where(eq(purchases.id, a.purchaseId));
+  if (!p || !p.product || !p.merchantId || !p.paypalAuthorizationId || p.paypalAuthorizationId !== a.authorizationId) throw new Error("No reserved purchase matches");
+  const [m] = await db.select().from(merchants).where(eq(merchants.id, p.merchantId));
+  if (p.status === "captured" && p.paypalCaptureId) {
+    // Already charged (the store retried): hand back the same record.
+    const [e] = await db.select().from(schema.ledger).where(and(eq(schema.ledger.purchaseId, p.id), eq(schema.ledger.type, "payment.captured"))).limit(1);
+    return { entry: e, captureId: p.paypalCaptureId };
+  }
+  if (p.status !== "authorized") throw new Error(`This purchase is ${p.status.replace(/_/g, " ")}, so it cannot be charged`);
+  const cap = await captureHold(a.authorizationId, `ship-${p.id}`);
+  if (cap.status !== "COMPLETED" && cap.status !== "PENDING") throw new Error(`PayPal did not capture the reservation (${cap.status})`);
+  const entry = await append({ userId: p.userId, purchaseId: p.id, type: "payment.captured", payload: {
+    paypalOrderId: p.paypalOrderId, paypalCaptureId: cap.id, paypalAuthorizationId: a.authorizationId, chargedOnShipment: true, tracking: a.tracking ?? null,
+    amountCents: p.amountCents, currency: p.currency, merchant: { id: m.id, name: m.name, baseUrl: m.baseUrl }, sku: p.product.sku, productName: p.product.name, quantity: p.quantity } });
+  await db.update(purchases).set({ status: "captured", paypalCaptureId: cap.id, updatedAt: new Date() }).where(eq(purchases.id, p.id));
+  await notify(p.userId, { kind: "charged", title: `${m.name} shipped your order`, detail: `${money(p.amountCents, p.currency)} was charged for ${p.product.name}.`, url: `${appUrl()}/purchases/${p.id}` }).catch(() => {});
+  return { entry, captureId: cap.id };
+}
+
+/** The buyer cancels a reserved purchase before it ships. The store releases the reservation; nothing is charged. */
+export async function cancelHold(userId: string, purchaseId: string) {
+  const [p] = await db.select().from(purchases).where(and(eq(purchases.id, purchaseId), eq(purchases.userId, userId)));
+  if (!p || p.status !== "authorized" || !p.paypalAuthorizationId || !p.merchantId) throw new Error("This purchase is not waiting to ship, so there is nothing to cancel");
+  const [m] = await db.select().from(merchants).where(eq(merchants.id, p.merchantId));
+  if (!m.ordersUrl) throw new Error("This store cannot be asked to release the reservation");
+  let reply: { voided?: boolean; reason?: string };
+  try {
+    const res = await fetch(`${m.ordersUrl}/cancel`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ purchaseId: p.id, authorizationId: p.paypalAuthorizationId }), signal: AbortSignal.timeout(30_000) });
+    reply = await res.json();
+  } catch (e) { throw new Error(`The store could not be reached: ${e instanceof Error ? e.message : e}`); }
+  if (!reply.voided) throw new Error(reply.reason ?? "The store did not release the reservation. It may already have shipped.");
+  await append({ userId, purchaseId, type: "payment.voided", payload: { paypalAuthorizationId: p.paypalAuthorizationId, by: m.name, at: "the buyer's request" } });
+  const [row] = await db.update(purchases).set({ status: "cancelled", updatedAt: new Date() }).where(eq(purchases.id, p.id)).returning();
+  return row;
 }
 
 /** The one-tap approval. Limits are re-checked in code: approval never lifts the mandate's ceiling. */

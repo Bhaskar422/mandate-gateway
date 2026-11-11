@@ -12,7 +12,7 @@ export function validNotifyUrl(raw: string): string {
   return u.toString();
 }
 
-export type NotifyEvent = { kind: "approval_needed" | "blocked" | "injection_flagged" | "agent_paused" | "offer_waiting" | "refunded"; title: string; detail: string; url?: string };
+export type NotifyEvent = { kind: "approval_needed" | "blocked" | "injection_flagged" | "agent_paused" | "offer_waiting" | "refunded" | "charged"; title: string; detail: string; url?: string };
 
 export async function notify(userId: string, e: NotifyEvent) {
   try {

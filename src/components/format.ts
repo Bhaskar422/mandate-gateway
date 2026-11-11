@@ -17,6 +17,8 @@ export const shortDay = (day: string) => `${MONTHS[Number(day.slice(5, 7)) - 1]}
 
 export const PURCHASE_STATUS: Record<string, { label: string; tone: Tone }> = {
   captured: { label: "Paid", tone: "ok" },
+  authorized: { label: "Reserved, charged on shipment", tone: "info" },
+  cancelled: { label: "Cancelled, not charged", tone: "neutral" },
   paying: { label: "Paying", tone: "neutral" },
   pending_approval: { label: "Needs your approval", tone: "warn" },
   blocked: { label: "Blocked", tone: "bad" },
@@ -92,6 +94,8 @@ export const LEDGER: Record<string, { title: string; tone: Tone }> = {
   "purchase.approved_by_user": { title: "You approved", tone: "ok" },
   "purchase.declined_by_user": { title: "You declined", tone: "neutral" },
   "payment.captured": { title: "PayPal payment completed", tone: "ok" },
+  "payment.authorized": { title: "Money reserved at PayPal, not yet charged", tone: "info" },
+  "payment.voided": { title: "Reservation released, nothing charged", tone: "neutral" },
   "payment.failed": { title: "PayPal payment failed", tone: "bad" },
   "problem.reported": { title: "You reported a problem", tone: "warn" },
   "refund.requested": { title: "Refund requested from the store", tone: "info" },

@@ -41,8 +41,8 @@ export async function dashboardState(userId: string) {
     return {
       id: a.id, name: a.name, keyPrefix: a.keyPrefix, builtIn: a.kind === "assistant", createdAt: a.createdAt.toISOString(), lastSeenAt: iso(a.lastSeenAt),
       status: a.revokedAt ? ("revoked" as const) : a.pausedAt ? ("paused" as const) : ("active" as const), pauseReason: a.pauseReason,
-      stats: { requests: mine.length, paid: mine.filter((p) => ["captured", "refunded", "partially_refunded", "refund_requested", "disputed"].includes(p.status)).length,
-        blocked: mine.filter((p) => p.status === "blocked").length, spentCents: mine.filter((p) => ["captured", "partially_refunded", "disputed", "refund_requested"].includes(p.status)).reduce((s, p) => s + p.amountCents - p.refundedCents, 0) },
+      stats: { requests: mine.length, paid: mine.filter((p) => ["captured", "authorized", "refunded", "partially_refunded", "refund_requested", "disputed"].includes(p.status)).length,
+        blocked: mine.filter((p) => p.status === "blocked").length, spentCents: mine.filter((p) => ["captured", "authorized", "partially_refunded", "disputed", "refund_requested"].includes(p.status)).reduce((s, p) => s + p.amountCents - p.refundedCents, 0) },
     };
   });
 
@@ -68,7 +68,7 @@ export async function dashboardState(userId: string) {
 
   // Fourteen days of activity, oldest first.
   const days = Array.from({ length: 14 }, (_, i) => new Date(now - (13 - i) * 864e5).toISOString().slice(0, 10));
-  const paid = (p: (typeof rows)[number]) => ["captured", "partially_refunded", "refund_requested", "disputed", "refunded"].includes(p.status);
+  const paid = (p: (typeof rows)[number]) => ["captured", "authorized", "partially_refunded", "refund_requested", "disputed", "refunded"].includes(p.status);
   const byDay = days.map((day) => {
     const on = rows.filter((p) => p.createdAt.toISOString().slice(0, 10) === day);
     return { day, paidCents: on.filter(paid).reduce((s, p) => s + p.amountCents - p.refundedCents, 0), paidCount: on.filter(paid).length, blockedCount: on.filter((p) => p.status === "blocked").length };
@@ -82,7 +82,7 @@ export async function dashboardState(userId: string) {
   return {
     appUrl: appUrl(), simulated: paypalSimulated(), llm: llmConfigured(),
     assistant: { remaining: assistantLeft, dailyLimit: assistantDailyLimit() },
-    account: { frozen: !!user?.frozenAt, frozenAt: iso(user?.frozenAt), settings: { autoAcceptRefundPercent: user?.settings?.autoAcceptRefundPercent ?? 100, autoAcceptReplacement: !!user?.settings?.autoAcceptReplacement, notifyUrl: user?.settings?.notifyUrl ?? null } },
+    account: { frozen: !!user?.frozenAt, frozenAt: iso(user?.frozenAt), settings: { autoAcceptRefundPercent: user?.settings?.autoAcceptRefundPercent ?? 100, autoAcceptReplacement: !!user?.settings?.autoAcceptReplacement, notifyUrl: user?.settings?.notifyUrl ?? null, chargeOnShipment: !!user?.settings?.chargeOnShipment } },
     paypal: link?.status === "active" ? { email: link.payerEmail } : null,
     mandates,
     /** The newest active mandate, for components that show one. */

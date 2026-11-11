@@ -30,6 +30,8 @@ export function describePurchase(p: Purchase) {
   const base = { purchase_id: p.id, status: p.status, product: p.product?.name ?? null, amount, record: `${appUrl()}/purchases/${p.id}` };
   switch (p.status) {
     case "captured": return { ...base, message: `Paid. ${amount} was charged to the user's PayPal account. PayPal order ${p.paypalOrderId}.` };
+    case "authorized": return { ...base, message: `Reserved. ${amount} is held on the user's PayPal account and will be charged when the store ships. PayPal order ${p.paypalOrderId}. The purchase is made; do not request it again.` };
+    case "cancelled": return { ...base, message: "The user cancelled this purchase before it shipped. Nothing was charged." };
     case "blocked": return { ...base, message: `BLOCKED by the user's mandate: ${p.decision.reason} This decision is final for this product. Do not try to work around it; tell the user what was blocked and why.` };
     case "pending_approval": return { ...base, approval_url: p.approvalToken ? `${appUrl()}/approve/${p.approvalToken}` : appUrl(),
       message: `Waiting for the user's approval: ${p.decision.reason} Give the user the approval_url (or ask them to open their Mandate dashboard), then call check_status. Do not request this purchase again.` };

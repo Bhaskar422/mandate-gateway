@@ -12,6 +12,8 @@ export type UserSettings = {
   autoAcceptReplacement?: boolean;
   /** A webhook (Slack, Discord, ntfy, or your own) the gateway posts to when something needs you. */
   notifyUrl?: string | null;
+  /** Reserve the money at purchase and charge it only when the store ships, at stores that support it. */
+  chargeOnShipment?: boolean;
 };
 
 export const users = pgTable("users", {
@@ -80,11 +82,15 @@ export const merchants = pgTable("merchants", {
   ordersUrl: text("orders_url"),
   returnsUrl: text("returns_url"),
   registeredBy: text("registered_by"),
+  /** The store can take a reserved (authorized) payment, tell the gateway when it ships, and release it on cancel. */
+  supportsHold: boolean("supports_hold").notNull().default(false),
+  /** Where the store publishes its products as JSON, for agents to search. */
+  catalogUrl: text("catalog_url"),
   createdAt: ts("created_at").notNull().defaultNow(),
 });
 
 export type PurchaseStatus =
-  | "blocked" | "pending_approval" | "declined" | "paying" | "captured" | "payment_failed"
+  | "blocked" | "pending_approval" | "declined" | "paying" | "captured" | "payment_failed" | "authorized" | "cancelled"
   | "refund_requested" | "refunded" | "partially_refunded" | "disputed";
 
 export const purchases = pgTable("purchases", {
@@ -104,6 +110,8 @@ export const purchases = pgTable("purchases", {
   decision: jsonb("decision").$type<Decision>().notNull(),
   paypalOrderId: text("paypal_order_id"),
   paypalCaptureId: text("paypal_capture_id"),
+  /** Set while the money is reserved but not yet charged. */
+  paypalAuthorizationId: text("paypal_authorization_id"),
   paypalRefundId: text("paypal_refund_id"),
   refundedCents: integer("refunded_cents").notNull().default(0),
   /** The unit price the agent said it saw. */
@@ -165,11 +173,12 @@ export const storeOrders = pgTable("store_orders", {
   gatewayPurchaseId: text("gateway_purchase_id").notNull(),
   paypalOrderId: text("paypal_order_id"),
   paypalCaptureId: text("paypal_capture_id"),
+  authorizationId: text("authorization_id"),
   sku: text("sku").notNull(),
   shippedSku: text("shipped_sku"),
   tracking: text("tracking"),
   amountCents: integer("amount_cents").notNull(),
-  status: text("status").$type<"paid" | "shipped" | "refunded">().notNull().default("paid"),
+  status: text("status").$type<"paid" | "held" | "shipped" | "refunded" | "cancelled">().notNull().default("paid"),
   paypalRefundId: text("paypal_refund_id"),
   disputeId: text("dispute_id"),
   disputeStatus: text("dispute_status"),

@@ -14,7 +14,7 @@ import { getStore } from "@/lib/stores/catalog";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60; // checking disputes talks to PayPal and a model
 
-const ORDER: Record<string, { label: string; tone: Tone }> = { paid: { label: "Paid, to ship", tone: "warn" }, shipped: { label: "Shipped", tone: "ok" }, refunded: { label: "Refunded", tone: "info" } };
+const ORDER: Record<string, { label: string; tone: Tone }> = { paid: { label: "Paid, to ship", tone: "warn" }, held: { label: "Reserved: shipping charges the buyer", tone: "warn" }, cancelled: { label: "Cancelled by the buyer", tone: "neutral" }, shipped: { label: "Shipped", tone: "ok" }, refunded: { label: "Refunded", tone: "info" } };
 const REGISTRY: Record<string, { label: string; tone: Tone; note: string }> = {
   verified: { label: "Verified", tone: "ok", note: "The gateway's operator has checked this store. Any mandate that allows verified stores can buy here." },
   registered: { label: "Registered", tone: "info", note: "The gateway knows this store and who to pay, but has not verified it. Only mandates that name it, or accept any registered store, can buy here." },
@@ -35,7 +35,7 @@ export default async function StoreAdmin({ params }: { params: Promise<{ slug: s
   ]);
   const name = (sku: string | null) => s.products.find((p) => p.sku === sku)?.name ?? sku ?? "";
   const reg = REGISTRY[merchants.find((m) => m.baseUrl === base)?.trust ?? "none"];
-  const open = orders.filter((o) => o.status === "paid").length;
+  const open = orders.filter((o) => o.status === "paid" || o.status === "held").length;
 
   return (
     <div className="space-y-10">
@@ -92,7 +92,7 @@ export default async function StoreAdmin({ params }: { params: Promise<{ slug: s
                   )}
                   {o.note && <p className="mt-3 text-sm text-ink-2 [overflow-wrap:anywhere]"><span className="font-semibold text-ink">Returns agent&apos;s note:</span> {o.note}</p>}
 
-                  <OrderActions slug={slug} orderId={o.id} sku={o.sku} wrongSku={wrong?.sku ?? null} wrongName={wrong?.name ?? null} canShip={o.status === "paid"} canRule={o.disputeStatus === "evidence submitted"} />
+                  <OrderActions slug={slug} orderId={o.id} sku={o.sku} wrongSku={wrong?.sku ?? null} wrongName={wrong?.name ?? null} canShip={o.status === "paid" || o.status === "held"} canRule={o.disputeStatus === "evidence submitted"} />
                 </li>
               );
             })}

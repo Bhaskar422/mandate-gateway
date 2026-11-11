@@ -47,6 +47,9 @@ A prompt injection can change what an agent asks for. It cannot raise a limit, c
 - **Safe retries.** `request_purchase` takes an idempotency key, and an identical request made again while the first is in flight or just paid returns the same purchase instead of charging twice.
 - **Approval links.** A purchase that needs approval carries a secret link the agent can hand to the user, who approves or declines from their phone without opening the dashboard.
 - **Notifications.** The user can give one webhook (Slack, Discord, ntfy or their own) that hears about approvals needed, blocked purchases, paused agents and merchant offers.
+- **Checked mandates.** The rules a model drafts from the user's words are checked against those words in code before the user sees them: a store rule or a gift-card category the user never wrote is removed, limits above the budget are lowered, and a missing budget, mixed currencies or a missing product category become questions the user must answer. The check runs again at confirmation. "Never buy from X" in any one mandate holds for all of them.
+- **Charge on shipment.** A user can choose to be charged only when the store ships. PayPal reserves the money at purchase (an authorization), the gateway captures it when the store reports the shipment, and until then the buyer can cancel and the store releases the reservation.
+- **Checked against PayPal.** Any purchase can be compared, fact by fact, with PayPal's own record of the order: amount, payee, capture or reservation state, refunds.
 - **Built-in shopping assistant.** A chat in the dashboard that shops at the demo stores, for trying the gateway with no setup. It is an ordinary agent: it has its own entry on the Agents page, can be paused or revoked, and buys only through the same functions the MCP server and REST API call. It runs on the gateway's model key, so each user gets a daily message allowance.
 - **Sign-in by PayPal.** There is no separate password. The PayPal account a user links is their identity: linking the same account from another browser signs that browser in to the same dashboard.
 - **Settlement rules.** The user decides what their agent may accept without asking: partial refunds at or above a chosen share of the price, and replacements.
@@ -99,7 +102,8 @@ Two demo shops live outside this repository, each with its own deployment, and j
 ## PayPal APIs used
 
 - **Vault v3** (`/v3/vault/setup-tokens`, `/v3/vault/payment-tokens`): the user saves their PayPal wallet once.
-- **Orders v2** (`/v2/checkout/orders` with `payment_source.paypal.vault_id`): each approved purchase is created and captured against the vault token, with the merchant as payee.
+- **Orders v2** (`/v2/checkout/orders` with `payment_source.paypal.vault_id`): each approved purchase is created against the vault token with the merchant as payee, either captured at once or authorized and captured on shipment. The store adds its tracking number to the order (`/v2/checkout/orders/{id}/track`), and the gateway reads orders back to reconcile its ledger.
+- **Payments v2 authorizations** (`/v2/payments/authorizations/{id}/capture` and `/void`): the gateway captures a reservation when the store ships; the store releases it if the buyer cancels first.
 - **Payments v2** (`/v2/payments/captures/{id}/refund`): the merchant refunds from its own account.
 - **Customer Disputes v1** (list, show, `provide-evidence`, `accept-claim`, `send-message`, and the sandbox-only `adjudicate`): the merchant's agent answers disputes.
 - **Webhooks** (`PAYMENT.CAPTURE.*`, `CUSTOMER.DISPUTE.*`) with signature verification through `/v1/notifications/verify-webhook-signature`.
@@ -139,6 +143,8 @@ Without PayPal credentials the gateway runs with clearly labelled simulated paym
 ```bash
 pnpm test                                             # unit tests: policy engine, page scanner, evidence ledger
 pnpm exec tsx --env-file=.env.local scripts/e2e.ts    # end-to-end checks over MCP and REST against a running server
+pnpm exec tsx --env-file=.env.local scripts/mandate-adversarial.ts   # hostile and ambiguous mandate texts through the compiler and the code check
+pnpm exec tsx --env-file=.env.local scripts/hold-check.ts            # reserve, charge on shipment, cancel, each compared with PayPal
 ```
 
 The end-to-end script drives the gateway as an agent would. It covers the approved, blocked, injected and refunded paths, the kill switch and automatic agent pause, the REST API and dry run, safe retries, scoped mandates, both settlement outcomes, merchant onboarding, credentials, key rotation and ledger tamper detection. It passes against the hosted deployment with real sandbox payments. `scripts/gullible-agent.ts` is a deliberately naive agent that obeys instructions found in product text, for demonstrating the injection block.
@@ -150,6 +156,8 @@ The end-to-end script drives the gateway as an agent would. It covers the approv
 - [`src/lib/gateway.ts`](src/lib/gateway.ts): purchase, approval, payment, settlement and account flows
 - [`src/lib/merchants.ts`](src/lib/merchants.ts): merchant registration, proof of ownership and operator review
 - [`src/lib/agent-api.ts`](src/lib/agent-api.ts): what agents see, shared by the MCP server and the REST API ([`src/app/api/v1`](src/app/api/v1))
+- [`src/lib/mandate-check.ts`](src/lib/mandate-check.ts): the code check on drafted mandate rules
+- [`src/lib/reconcile.ts`](src/lib/reconcile.ts): comparing a purchase with PayPal's record
 - [`src/lib/ledger.ts`](src/lib/ledger.ts): the evidence ledger
 - [`src/lib/paypal.ts`](src/lib/paypal.ts): Vault, Orders, refunds, Disputes, webhook verification
 - [`src/lib/assistant.ts`](src/lib/assistant.ts): the built-in shopping assistant (a Claude tool loop over the agent API)
@@ -162,6 +170,7 @@ Stack: Next.js 15, TypeScript, PostgreSQL with Drizzle, the Model Context Protoc
 
 ## Limits of this build
 
+- **A reservation is not released automatically.** If a store never ships and the buyer never cancels, the hold stays until PayPal expires it (the sandbox reported about 29 days).
 - **Sandbox only.** It has never run against live PayPal. Paying a third-party merchant from a vaulted wallet works in the sandbox as built; in production we expect it to need PayPal's partner onboarding for each merchant.
 - **The demo merchants live in the same app as the gateway.** They talk to it over HTTP and verify its signatures, but they share its database and deployment. The third store, Peak, borrows Stride's sandbox PayPal account.
 - **The page scanner is a set of patterns.** It catches the common phrasings of injected instructions, not every possible one. It is a second line behind the limits, which do not depend on it.

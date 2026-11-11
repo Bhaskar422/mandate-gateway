@@ -68,26 +68,59 @@ export async function createPaymentToken(setupTokenId: string) {
 
 export type PayResult = { orderId: string; status: string; captureId: string | null; captureStatus: string | null; raw: unknown };
 
-export async function payWithVault(a: {
+type OrderInput = {
   vaultId: string; amountCents: number; currency: string; description: string; referenceId: string;
   payee: { merchantId: string | null; email: string | null } | null; sku?: string | null; itemName: string; quantity: number; unitCents: number;
-}): Promise<PayResult> {
-  if (paypalSimulated()) return { orderId: sim("ORDER"), status: "COMPLETED", captureId: sim("CAPTURE"), captureStatus: "COMPLETED", raw: { simulated: true } };
+};
+type OrderReply = { id: string; status: string; purchase_units?: { payments?: { captures?: { id: string; status: string }[]; authorizations?: { id: string; status: string; expiration_time?: string }[] } }[] };
+const orderBody = (a: OrderInput, intent: "CAPTURE" | "AUTHORIZE") => {
   const payee = a.payee?.merchantId ? { merchant_id: a.payee.merchantId } : a.payee?.email ? { email_address: a.payee.email } : undefined;
-  const r = await call<{ id: string; status: string; purchase_units?: { payments?: { captures?: { id: string; status: string }[] } }[] }>(
-    need(gatewayCreds()), "POST", "/v2/checkout/orders", {
-      intent: "CAPTURE",
-      purchase_units: [{
-        reference_id: a.referenceId, custom_id: a.referenceId, description: a.description.slice(0, 127),
-        amount: { currency_code: a.currency, value: usd(a.amountCents), breakdown: { item_total: { currency_code: a.currency, value: usd(a.amountCents) } } },
-        items: [{ name: a.itemName.slice(0, 127), quantity: String(a.quantity), sku: a.sku ?? undefined, unit_amount: { currency_code: a.currency, value: usd(a.unitCents) } }],
-        ...(payee ? { payee } : {}),
-      }],
-      payment_source: { paypal: { vault_id: a.vaultId } },
-    }, { requestId: a.referenceId });
+  return {
+    intent,
+    purchase_units: [{
+      reference_id: a.referenceId, custom_id: a.referenceId, description: a.description.slice(0, 127),
+      amount: { currency_code: a.currency, value: usd(a.amountCents), breakdown: { item_total: { currency_code: a.currency, value: usd(a.amountCents) } } },
+      items: [{ name: a.itemName.slice(0, 127), quantity: String(a.quantity), sku: a.sku ?? undefined, unit_amount: { currency_code: a.currency, value: usd(a.unitCents) } }],
+      ...(payee ? { payee } : {}),
+    }],
+    payment_source: { paypal: { vault_id: a.vaultId } },
+  };
+};
+
+export async function payWithVault(a: OrderInput): Promise<PayResult> {
+  if (paypalSimulated()) return { orderId: sim("ORDER"), status: "COMPLETED", captureId: sim("CAPTURE"), captureStatus: "COMPLETED", raw: { simulated: true } };
+  const r = await call<OrderReply>(need(gatewayCreds()), "POST", "/v2/checkout/orders", orderBody(a, "CAPTURE"), { requestId: a.referenceId });
   const cap = r.purchase_units?.[0]?.payments?.captures?.[0];
   return { orderId: r.id, status: r.status, captureId: cap?.id ?? null, captureStatus: cap?.status ?? null, raw: r };
 }
+
+// ---- Hold now, charge on shipment: an authorization reserves the money without taking it ----
+
+export type HoldResult = { orderId: string; status: string; authorizationId: string | null; authorizationStatus: string | null; expiresAt: string | null; raw: unknown };
+/** Reserve the amount on the buyer's saved wallet for this merchant. Nothing is charged until it is captured. */
+export async function holdWithVault(a: OrderInput): Promise<HoldResult> {
+  if (paypalSimulated()) return { orderId: sim("ORDER"), status: "COMPLETED", authorizationId: sim("AUTH"), authorizationStatus: "CREATED", expiresAt: null, raw: { simulated: true } };
+  const r = await call<OrderReply>(need(gatewayCreds()), "POST", "/v2/checkout/orders", orderBody(a, "AUTHORIZE"), { requestId: `hold-${a.referenceId}` });
+  const au = r.purchase_units?.[0]?.payments?.authorizations?.[0];
+  return { orderId: r.id, status: r.status, authorizationId: au?.id ?? null, authorizationStatus: au?.status ?? null, expiresAt: au?.expiration_time ?? null, raw: r };
+}
+/** Take the reserved money. Called when the merchant has shipped. */
+export async function captureHold(authorizationId: string, requestId: string) {
+  if (paypalSimulated() || authorizationId.startsWith("SIM-")) return { id: sim("CAPTURE"), status: "COMPLETED" };
+  return call<{ id: string; status: string }>(need(gatewayCreds()), "POST", `/v2/payments/authorizations/${authorizationId}/capture`, { final_capture: true }, { requestId });
+}
+/** Release the reserved money without charging it. */
+export async function voidHold(authorizationId: string, c: PayPalCreds | null = gatewayCreds()) {
+  if (paypalSimulated() || authorizationId.startsWith("SIM-")) return;
+  await call(need(c), "POST", `/v2/payments/authorizations/${authorizationId}/void`, undefined, {});
+}
+
+/** Attach a carrier and tracking number to the PayPal order, so the buyer sees the shipment in PayPal. */
+export async function addTracking(c: PayPalCreds | null, orderId: string, a: { captureId: string; trackingNumber: string; carrier?: string }) {
+  if (paypalSimulated() || orderId.startsWith("SIM-")) return { simulated: true };
+  return call(need(c), "POST", `/v2/checkout/orders/${orderId}/track`, { capture_id: a.captureId, tracking_number: a.trackingNumber, carrier: a.carrier ?? "OTHER", carrier_name_other: a.carrier ? undefined : "Store courier", notify_payer: false });
+}
+export const getCapture = (captureId: string, c = gatewayCreds()) => call<{ id: string; status: string; amount?: { value: string; currency_code: string }; payee?: { merchant_id?: string; email_address?: string }; custom_id?: string }>(need(c), "GET", `/v2/payments/captures/${captureId}`);
 
 export const getOrder = (orderId: string, c = gatewayCreds()) => call(need(c), "GET", `/v2/checkout/orders/${orderId}`);
 

@@ -10,7 +10,7 @@ export function GET() {
     user_request: { type: "string", description: "What the user asked for, in their own words" },
     reason: { type: "string", description: "Why this product fits the request" },
     idempotency_key: { type: "string", description: "Unique per purchase attempt; resend it when retrying" } } };
-  const result = { type: "object", properties: { purchase_id: { type: "string" }, status: { type: "string", enum: ["captured", "blocked", "pending_approval", "payment_failed", "declined", "refund_requested", "refunded", "partially_refunded", "disputed"] },
+  const result = { type: "object", properties: { purchase_id: { type: "string" }, status: { type: "string", enum: ["captured", "authorized", "cancelled", "blocked", "pending_approval", "payment_failed", "declined", "refund_requested", "refunded", "partially_refunded", "disputed"] },
     product: { type: "string", nullable: true }, amount: { type: "string", nullable: true }, message: { type: "string" }, record: { type: "string" }, approval_url: { type: "string" } } };
   const json = (schema: unknown) => ({ content: { "application/json": { schema } } });
   return Response.json({

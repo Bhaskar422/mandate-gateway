@@ -37,7 +37,7 @@ export async function registerMerchant(userId: string, rawUrl: string) {
   return m;
 }
 
-type WellKnown = { mandate_verification?: string; name?: string; paypal?: { merchant_id?: string; email?: string }; orders_url?: string; returns_url?: string };
+type WellKnown = { mandate_verification?: string; name?: string; paypal?: { merchant_id?: string; email?: string }; orders_url?: string; returns_url?: string; catalog_url?: string; holds?: boolean };
 
 /** Step 2: fetch the store's well-known file and check the token. Only then does it become payable. */
 export async function verifyMerchantDomain(userId: string, merchantId: string) {
@@ -55,7 +55,9 @@ export async function verifyMerchantDomain(userId: string, merchantId: string) {
   if (!payee.paypalMerchantId && !payee.paypalEmail) throw new Error("The file must name the store's PayPal account under paypal.merchant_id or paypal.email");
   // Callback URLs must live under the store's own verified base URL.
   const under = (v: string | undefined) => (typeof v === "string" && (v === m.baseUrl || v.startsWith(`${m.baseUrl}/`)) ? v : null);
-  const [row] = await db.update(merchants).set({ ...payee, name: (file.name ?? m.name).slice(0, 80), ordersUrl: under(file.orders_url), returnsUrl: under(file.returns_url), domainVerifiedAt: new Date() })
+  const [row] = await db.update(merchants).set({ ...payee, name: (file.name ?? m.name).slice(0, 80), ordersUrl: under(file.orders_url), returnsUrl: under(file.returns_url), catalogUrl: under(file.catalog_url),
+    // A store may take reserved payments only if it can be told about orders, since that is how it learns to ship and to release.
+    supportsHold: file.holds === true && !!under(file.orders_url), domainVerifiedAt: new Date() })
     .where(eq(merchants.id, m.id)).returning();
   await append({ userId, type: "merchant.verified", payload: { merchantId: m.id, baseUrl: m.baseUrl, name: row.name, payee } });
   return row;

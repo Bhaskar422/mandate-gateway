@@ -98,6 +98,24 @@ function Alerts() {
   );
 }
 
+function ChargeOnShipment() {
+  const { state } = useAccount();
+  const save = useAction(updateSettingsAction);
+  const on = state.account.settings.chargeOnShipment;
+  return (
+    <div className="card flex flex-wrap items-center justify-between gap-4 p-5 sm:p-6">
+      <div className="max-w-xl">
+        <p className="text-lg font-semibold text-ink">{on ? "You are charged when the store ships" : "You are charged when the purchase is made"}</p>
+        <p className="text-sm text-ink-3">
+          With this on, PayPal reserves the money at purchase and the store is paid only once it ships. Until then you can cancel and nothing is taken. It applies at stores that support it; elsewhere you are charged at purchase as usual. A reservation counts against your mandate&apos;s budget.
+        </p>
+        <ErrorText>{save.error}</ErrorText>
+      </div>
+      <Button variant={on ? "secondary" : "primary"} loading={save.pending} onClick={() => save.run({ chargeOnShipment: !on })}>{on ? "Charge at purchase instead" : "Charge only on shipment"}</Button>
+    </div>
+  );
+}
+
 function SignOut() {
   const { state } = useAccount();
   const [pending, setPending] = useState(false);
@@ -126,6 +144,8 @@ export default function Settings() {
       <div className="space-y-8">
         <Section title="Settlement rules" hint="How far your agent may go by itself when something goes wrong with a purchase."><SettlementRules /></Section>
         <Section title="Alerts"><Alerts /></Section>
+
+        <Section title="When you are charged"><ChargeOnShipment /></Section>
 
         <Section title="PayPal">
           <div className="card flex flex-wrap items-center justify-between gap-4 p-5 sm:p-6">

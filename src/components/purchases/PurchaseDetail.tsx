@@ -14,7 +14,7 @@ import ChecksList from "./ChecksList";
 import EvidenceTimeline, { type EvidenceEntry } from "./EvidenceTimeline";
 import InjectionWarning from "./InjectionWarning";
 import NegotiationThread from "./NegotiationThread";
-import { ApprovalButtons, OfferCard, ReportProblem } from "./PurchaseActions";
+import { ApprovalButtons, CancelHold, OfferCard, ReconcileWithPayPal, ReportProblem } from "./PurchaseActions";
 import { purchaseReason } from "./PurchaseCard";
 
 export type Verification = { ok: true } | { ok: false; why: string };
@@ -70,12 +70,13 @@ export default function PurchaseDetail({ basics, entries, verification }: { basi
           </div>
         )}
 
-        {p && (p.status === "pending_approval" || p.status === "captured" || p.case?.status === "offer_pending") && (
+        {p && (p.status === "pending_approval" || p.status === "captured" || p.status === "authorized" || p.case?.status === "offer_pending") && (
           <div className="mt-5 space-y-3 border-t border-line pt-5">
             {p.status === "pending_approval" && <>
               <p className="text-base text-ink-2">This purchase is waiting for you. Approving pays the store from your PayPal account right away; your mandate&apos;s limits are checked again first.</p>
               <ApprovalButtons p={p} />
             </>}
+            <CancelHold p={p} />
             {p.case?.status === "offer_pending" && <OfferCard p={p} />}
             <ReportProblem p={p} />
           </div>
@@ -125,6 +126,12 @@ export default function PurchaseDetail({ basics, entries, verification }: { basi
                 <a className="btn btn-secondary btn-sm" href={`/api/purchases/${basics.id}/evidence.pdf`}><FileText size={13} aria-hidden />Evidence PDF</a>
               </div>
               <p className="mt-3 text-sm text-ink-3">Anyone you send the JSON file to can check it on the public <Link href="/verify" className="link">verify page</Link>, without an account.</p>
+              {p?.paypalOrderId && (
+                <div className="mt-4 border-t border-line pt-4">
+                  <p className="mb-2 text-sm text-ink-2">The ledger is the gateway&apos;s account of what happened. PayPal keeps its own. This asks PayPal for the order and compares the two.</p>
+                  <ReconcileWithPayPal purchaseId={basics.id} />
+                </div>
+              )}
             </div>
           </Section>
 

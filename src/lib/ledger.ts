@@ -9,7 +9,7 @@ export type LedgerType =
   | "purchase.approved_by_user" | "purchase.declined_by_user" | "payment.captured" | "payment.failed"
   | "problem.reported" | "refund.requested" | "refund.completed" | "merchant.declined" | "dispute.opened" | "dispute.evidence_submitted" | "webhook.received"
   | "settlement.offer" | "settlement.counter" | "settlement.accepted" | "settlement.declined"
-  | "agent.paused" | "agent.resumed" | "agent.revoked" | "agent.key_rotated" | "account.frozen" | "account.unfrozen" | "merchant.registered" | "merchant.verified" | "merchant.reviewed" | "merchant.removed";
+  | "agent.paused" | "agent.resumed" | "agent.revoked" | "agent.key_rotated" | "account.frozen" | "account.unfrozen" | "merchant.registered" | "merchant.verified" | "merchant.reviewed" | "merchant.removed" | "payment.authorized" | "payment.voided";
 
 function keys() {
   const pem = process.env.LEDGER_SIGNING_KEY ? Buffer.from(process.env.LEDGER_SIGNING_KEY, "base64").toString("utf8") : null;

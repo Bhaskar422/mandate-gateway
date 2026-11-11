@@ -6,7 +6,7 @@ import { db, schema } from "../db";
 import type { SettlementOffer } from "../db/schema";
 import { newId } from "../ids";
 import { publicKeyPem, verifyBundle, type LedgerRow } from "../ledger";
-import { acceptClaim, adjudicate, getDispute, listDisputes, provideEvidence, refundCapture, sendDisputeMessage, type Dispute } from "../paypal";
+import { acceptClaim, addTracking, adjudicate, getDispute, listDisputes, provideEvidence, refundCapture, sendDisputeMessage, voidHold, type Dispute } from "../paypal";
 import { textPdf } from "../pdf";
 import { getProduct } from "./catalog";
 
@@ -15,15 +15,22 @@ const { storeOrders } = schema;
 const pinnedGatewayKey = () => publicKeyPem();
 const creds = (slug: string) => storeCreds(slug) ?? gatewayCreds();
 
-/** A paid order arrives from the gateway. Accept it only if the signed capture record verifies. */
+/**
+ * An order arrives from the gateway: paid, or reserved until it ships. Accept it only if the signed record verifies.
+ * A reserved order becomes a paid one when the gateway later sends the capture record for the same purchase.
+ */
 export async function recordOrder(slug: string, entry: LedgerRow) {
   const v = verifyBundle({ publicKey: pinnedGatewayKey(), entries: [entry] }, pinnedGatewayKey());
-  if (!v.ok || entry.type !== "payment.captured" || !entry.purchaseId) throw new Error(`Rejected: ${v.ok ? "not a capture record" : v.why}`);
-  const pl = entry.payload as { paypalOrderId: string; paypalCaptureId: string; amountCents: number; sku: string };
+  const held = entry.type === "payment.authorized";
+  if (!v.ok || (!held && entry.type !== "payment.captured") || !entry.purchaseId) throw new Error(`Rejected: ${v.ok ? "not a payment record" : v.why}`);
+  const pl = entry.payload as { paypalOrderId: string; paypalCaptureId?: string; paypalAuthorizationId?: string; amountCents: number; sku: string };
   const [existing] = await db.select().from(storeOrders).where(eq(storeOrders.gatewayPurchaseId, entry.purchaseId));
-  if (existing) return existing;
+  if (existing) {
+    if (!held && pl.paypalCaptureId && !existing.paypalCaptureId) return (await db.update(storeOrders).set({ paypalCaptureId: pl.paypalCaptureId }).where(eq(storeOrders.id, existing.id)).returning())[0];
+    return existing;
+  }
   const [o] = await db.insert(storeOrders).values({ id: newId("ord"), storeSlug: slug, gatewayPurchaseId: entry.purchaseId, paypalOrderId: pl.paypalOrderId,
-    paypalCaptureId: pl.paypalCaptureId, sku: pl.sku, amountCents: pl.amountCents, status: "paid" }).returning();
+    paypalCaptureId: pl.paypalCaptureId ?? null, authorizationId: pl.paypalAuthorizationId ?? null, sku: pl.sku, amountCents: pl.amountCents, status: held ? "held" : "paid" }).returning();
   return o;
 }
 
@@ -33,9 +40,39 @@ export async function publishVerificationToken(slug: string, token: string) {
   await db.insert(schema.storeSettings).values({ slug, verificationToken: t }).onConflictDoUpdate({ target: schema.storeSettings.slug, set: { verificationToken: t, updatedAt: new Date() } });
 }
 
+/**
+ * Ship an order. For a reserved order the store first tells the gateway, which charges the buyer and returns the
+ * signed capture record; only then does the order count as shipped. Either way the tracking number is added to
+ * the PayPal order, so the buyer sees the shipment in PayPal.
+ */
 export async function shipOrder(slug: string, orderId: string, shippedSku: string) {
-  const [o] = await db.update(storeOrders).set({ status: "shipped", shippedSku, tracking: `STR${Date.now().toString(36).toUpperCase()}` }).where(and(eq(storeOrders.id, orderId), eq(storeOrders.storeSlug, slug), eq(storeOrders.status, "paid"))).returning();
+  const [before] = await db.select().from(storeOrders).where(and(eq(storeOrders.id, orderId), eq(storeOrders.storeSlug, slug)));
+  if (!before || (before.status !== "paid" && before.status !== "held")) return null;
+  const tracking = `STR${Date.now().toString(36).toUpperCase()}`;
+  let captureId = before.paypalCaptureId;
+  if (before.status === "held") {
+    const res = await fetch(`${appUrl()}/api/merchant/shipments`, { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ purchaseId: before.gatewayPurchaseId, authorizationId: before.authorizationId, tracking }), signal: AbortSignal.timeout(40_000) });
+    const j = (await res.json()) as { entry?: LedgerRow; captureId?: string; error?: string };
+    if (!res.ok || !j.entry || !j.captureId) throw new Error(j.error ?? "The gateway did not charge the reserved payment");
+    const v = verifyBundle({ publicKey: pinnedGatewayKey(), entries: [j.entry] }, pinnedGatewayKey());
+    if (!v.ok || j.entry.type !== "payment.captured") throw new Error("The gateway's capture record did not verify");
+    captureId = j.captureId;
+  }
+  const [o] = await db.update(storeOrders).set({ status: "shipped", shippedSku, tracking, paypalCaptureId: captureId }).where(eq(storeOrders.id, orderId)).returning();
+  if (o?.paypalOrderId && captureId) await addTracking(creds(slug), o.paypalOrderId, { captureId, trackingNumber: tracking }).catch((e) => console.error("adding tracking to the PayPal order failed:", e));
   return o ?? null;
+}
+
+/** The buyer cancelled a reserved order before it shipped. The store releases the reservation with its own PayPal account. */
+export async function cancelHeldOrder(slug: string, body: { purchaseId?: string; authorizationId?: string }) {
+  const [o] = await db.select().from(storeOrders).where(and(eq(storeOrders.storeSlug, slug), eq(storeOrders.gatewayPurchaseId, body.purchaseId ?? "")));
+  if (!o || !o.authorizationId || o.authorizationId !== body.authorizationId) return { voided: false, reason: "This store has no reserved order that matches." };
+  if (o.status === "cancelled") return { voided: true };
+  if (o.status !== "held") return { voided: false, reason: "The order has already shipped, so it can no longer be cancelled. Report a problem instead." };
+  await voidHold(o.authorizationId, creds(slug));
+  await db.update(storeOrders).set({ status: "cancelled", note: "Cancelled by the buyer before shipping; reservation released" }).where(eq(storeOrders.id, o.id));
+  return { voided: true };
 }
 
 type Claim = { issue: string; summary: string };

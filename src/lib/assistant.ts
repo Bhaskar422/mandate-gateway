@@ -77,9 +77,30 @@ const purchaseProps = {
   user_request: { type: "string", description: "What the user asked for, in their own words" },
   reason: { type: "string", description: "Why this product fits the request" },
 };
-const TOOLS: Anthropic.Tool[] = [
-  { name: "search_products", description: `Search the catalogues of the shops this demo knows: ${STORES.map((s) => `${s.name} ("${s.slug}")`).join(", ")}. Returns products with prices and product page URLs. An empty query returns everything.`,
-    input_schema: { type: "object", properties: { query: { type: "string" }, store: { type: "string", description: "Optional shop slug to search only that shop" } } } },
+// Stores that joined the gateway by themselves publish their catalogue as JSON. It is fetched when the assistant
+// searches, and it is the store's own text: untrusted, like every catalogue.
+type Listed = { store: string; sku: string; name: string; price: string; currency: string; category: string; url: string; description: string };
+async function outsideCatalogues(): Promise<{ shop: string; products: Listed[] }[]> {
+  const rows = await db.select().from(schema.merchants).where(eq(schema.merchants.source, "onboarded"));
+  const live = rows.filter((m) => m.domainVerifiedAt && m.catalogUrl && !m.baseUrl.startsWith(`${appUrl()}/stores/`));
+  return Promise.all(live.map(async (m) => {
+    try {
+      const res = await fetch(m.catalogUrl!, { redirect: "error", signal: AbortSignal.timeout(6000), cache: "no-store", headers: { Accept: "application/json", "User-Agent": "MandateGateway/1.0" } });
+      if (!res.ok) throw new Error(String(res.status));
+      const j = JSON.parse((await res.text()).slice(0, 300_000)) as { products?: Record<string, unknown>[] };
+      const str = (v: unknown, n: number) => (typeof v === "string" || typeof v === "number" ? String(v).slice(0, n) : "");
+      const products = (Array.isArray(j.products) ? j.products : []).slice(0, 60).map((p) => ({ store: m.name, sku: str(p.sku, 60), name: str(p.name, 200), price: str(p.price, 20), currency: str(p.currency, 3) || "USD",
+        category: str(p.category, 80), url: str(p.url, 400), description: str(p.description, 1500) }))
+        // Only pages under the store's own registered address can be bought, so only those are listed.
+        .filter((p) => p.name && p.url.startsWith(`${m.baseUrl}/`));
+      return { shop: m.name, products };
+    } catch (e) { console.error(`catalogue of ${m.name} could not be read:`, e); return { shop: m.name, products: [] }; }
+  }));
+}
+
+const tools = (shops: string): Anthropic.Tool[] => [
+  { name: "search_products", description: `Search the catalogues of the shops this gateway knows: ${shops}. Returns products with prices and product page URLs. An empty query returns everything.`,
+    input_schema: { type: "object", properties: { query: { type: "string" }, store: { type: "string", description: "Optional shop name, or part of it, to search only that shop" } } } },
   { name: "get_mandate", description: "Read what the user has authorised you to buy: budget left, allowed categories, merchant rules, the ask-first amount and the expiry.", input_schema: { type: "object", properties: {} } },
   { name: "check_purchase", description: "A dry run. Says whether a purchase would be paid, need the user's approval or be blocked, and why. Nothing is charged or recorded.",
     input_schema: { type: "object", properties: purchaseProps, required: ["product_url", "expected_price", "user_request"] } },
@@ -94,7 +115,7 @@ type StepResult = { result: unknown; summary: string; tone: "ok" | "warn" | "bad
 const purchaseStep = (d: { purchase_id: string; status: string; product: string | null; amount: string | null; approval_url?: string }): StepResult => {
   const what = [d.product, d.amount].filter(Boolean).join(", ") || "purchase";
   const by: Record<string, [string, StepResult["tone"]]> = {
-    captured: [`Paid: ${what}`, "ok"], pending_approval: [`Waiting for your approval: ${what}`, "warn"], blocked: [`Blocked by your mandate: ${what}`, "bad"],
+    captured: [`Paid: ${what}`, "ok"], authorized: [`Reserved, charged when it ships: ${what}`, "ok"], cancelled: [`Cancelled, not charged: ${what}`, "neutral"], pending_approval: [`Waiting for your approval: ${what}`, "warn"], blocked: [`Blocked by your mandate: ${what}`, "bad"],
     payment_failed: [`PayPal did not complete the payment: ${what}`, "bad"], declined: [`You declined: ${what}`, "neutral"], refunded: [`Refunded: ${what}`, "ok"],
     partially_refunded: [`Partly refunded: ${what}`, "ok"], refund_requested: [`Refund requested: ${what}`, "warn"], disputed: [`In dispute: ${what}`, "warn"],
   };
@@ -118,8 +139,11 @@ async function runTool(agent: AgentRef, name: ToolName, raw: unknown): Promise<S
     case "search_products": {
       const { query, store } = parsed.data as z.infer<typeof INPUTS.search_products>;
       const words = query.toLowerCase().split(/\s+/).filter(Boolean);
-      const hits = STORES.filter((s) => !store || s.slug === store.toLowerCase() || s.name.toLowerCase().includes(store.toLowerCase()))
-        .flatMap((s) => s.products.filter((p) => !words.length || words.some((w) => `${p.name} ${p.category} ${p.description}`.toLowerCase().includes(w))).map((p) => productView(s, p)));
+      const wanted = (shop: string, slug?: string) => !store || slug === store.toLowerCase() || shop.toLowerCase().includes(store.toLowerCase());
+      const match = (p: { name: string; category: string; description: string }) => !words.length || words.some((w) => `${p.name} ${p.category} ${p.description}`.toLowerCase().includes(w));
+      const inApp = STORES.filter((s) => wanted(s.name, s.slug)).flatMap((s) => s.products.filter(match).map((p) => productView(s, p)));
+      const outside = (await outsideCatalogues()).filter((c) => wanted(c.shop)).flatMap((c) => c.products.filter(match));
+      const hits = [...inApp, ...outside];
       return { result: { products: hits }, summary: `Found ${hits.length} ${hits.length === 1 ? "product" : "products"}`, tone: "neutral" };
     }
     case "get_mandate": {
@@ -148,7 +172,7 @@ async function runTool(agent: AgentRef, name: ToolName, raw: unknown): Promise<S
 
 const SYSTEM = `You are the shopping assistant built into Mandate, a gateway that lets AI agents pay from a person's PayPal account within rules that person set (their "mandate").
 
-You shop for the user at the demo shops and buy through the gateway's tools. You never see or handle payment details. The gateway decides every purchase: it pays, asks the user to approve, or blocks with a reason.
+You shop for the user at the shops this gateway knows and buy through the gateway's tools. You never see or handle payment details. The gateway decides every purchase: it pays, asks the user to approve, or blocks with a reason.
 
 How to work:
 - For a buying request, look at the catalogue, pick the product that best fits what the user asked for, and request the purchase. The user is asking you to act, so do not ask them to confirm a choice that clearly fits; do ask when the request is ambiguous in a way that changes what you would buy.
@@ -173,10 +197,12 @@ export async function runAssistant(userId: string, history: ChatTurn[], emit: (e
   if (remaining < 0) return emit({ type: "error", message: `You have used today's ${assistantDailyLimit()} assistant messages. The limit resets at midnight UTC; agents you connect yourself are not limited.` });
   db.update(schema.agents).set({ lastSeenAt: new Date() }).where(eq(schema.agents.id, agent.id)).catch(() => {});
 
+  const outside = await db.select({ name: schema.merchants.name }).from(schema.merchants).where(and(eq(schema.merchants.source, "onboarded"), sql`${schema.merchants.catalogUrl} is not null`, sql`${schema.merchants.domainVerifiedAt} is not null`));
+  const toolList = tools([...STORES.map((s) => s.name), ...outside.map((m) => m.name).filter((n) => !STORES.some((s) => s.name === n))].join(", "));
   const messages: Anthropic.MessageParam[] = history.slice(-12).map((t) => ({ role: t.role, content: t.text.slice(0, 4000) }));
   try {
     for (let i = 0; i < 8; i++) {
-      const stream = anthropic().messages.stream({ model: assistantModel(), max_tokens: 4000, system: SYSTEM, tools: TOOLS, messages, output_config: { effort: "low" } });
+      const stream = anthropic().messages.stream({ model: assistantModel(), max_tokens: 4000, system: SYSTEM, tools: toolList, messages, output_config: { effort: "low" } });
       stream.on("text", (delta) => emit({ type: "text", delta }));
       const message = await stream.finalMessage();
       if (message.stop_reason === "refusal") { emit({ type: "error", message: "The model declined this request." }); break; }

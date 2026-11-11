@@ -1,11 +1,12 @@
 "use client";
 import { Check, CircleHelp, Handshake, MessageSquareWarning, X } from "lucide-react";
 import { useState } from "react";
-import { answerOfferAction, approvalAction, reportProblemAction } from "@/app/actions";
+import { answerOfferAction, approvalAction, cancelHoldAction, reconcilePurchaseAction, reportProblemAction } from "@/app/actions";
 import type { PurchaseView } from "@/lib/views";
 import { describeOffer, money } from "../format";
 import Banner, { ErrorText } from "../ui/Banner";
 import Button from "../ui/Button";
+import ConfirmButton from "../ui/ConfirmButton";
 import { useAction } from "../useAction";
 
 /** Approve or decline a purchase that is waiting for the user. */
@@ -72,5 +73,51 @@ export function ReportProblem({ p }: { p: PurchaseView }) {
       </div>
       {error && <div className="mt-2"><ErrorText>{error}</ErrorText></div>}
     </form>
+  );
+}
+
+
+/** A reserved purchase can be cancelled until the store ships it. */
+export function CancelHold({ p }: { p: PurchaseView }) {
+  const { run, pending, error } = useAction(cancelHoldAction);
+  if (p.status !== "authorized") return null;
+  return (
+    <div className="space-y-2">
+      <p className="text-base text-ink-2">The money is reserved at PayPal but has not been charged. It is charged when {p.merchant ?? "the store"} ships. Until then you can cancel and nothing is taken.</p>
+      <ConfirmButton variant="secondary" question="Cancel this purchase and release the money?" confirmLabel="Cancel purchase" loading={pending} onConfirm={() => run(p.id)}>Cancel before it ships</ConfirmButton>
+      <ErrorText>{error}</ErrorText>
+    </div>
+  );
+}
+
+/** Ask PayPal about the order and line its answer up against the gateway's own record. */
+export function ReconcileWithPayPal({ purchaseId }: { purchaseId: string }) {
+  const { run, pending, error } = useAction(reconcilePurchaseAction);
+  const [r, setR] = useState<{ rows: { what: string; gateway: string; paypal: string; match: boolean }[]; allMatch: boolean; note?: string } | null>(null);
+  return (
+    <div>
+      <Button size="sm" loading={pending} loadingText="Asking PayPal" onClick={async () => { const x = await run(purchaseId); if (x) setR(x); }}>Check against PayPal</Button>
+      <ErrorText>{error}</ErrorText>
+      {r && (r.note ? <p className="mt-2 text-sm text-ink-2">{r.note}</p> : (
+        <div className="mt-3" role="status">
+          <p className={`text-sm font-semibold ${r.allMatch ? "text-ok-ink" : "text-bad-ink"}`}>{r.allMatch ? "PayPal's record of this order matches the gateway's." : "PayPal's record differs from the gateway's. The rows marked below do not match."}</p>
+          <div className="mt-2 overflow-x-auto rounded-[10px] border border-line">
+            <table className="w-full min-w-[480px] text-sm">
+              <thead><tr className="bg-raised text-left text-ink-3"><th className="px-3 py-2 font-semibold">Fact</th><th className="px-3 py-2 font-semibold">Gateway ledger</th><th className="px-3 py-2 font-semibold">PayPal</th><th className="px-3 py-2 font-semibold">Match</th></tr></thead>
+              <tbody>
+                {r.rows.map((x) => (
+                  <tr key={x.what} className="border-t border-line">
+                    <td className="px-3 py-2 text-ink">{x.what}</td>
+                    <td className="code px-3 py-2 text-ink-2 [overflow-wrap:anywhere]">{x.gateway}</td>
+                    <td className="code px-3 py-2 text-ink-2 [overflow-wrap:anywhere]">{x.paypal}</td>
+                    <td className={`px-3 py-2 font-semibold ${x.match ? "text-ok-ink" : "text-bad-ink"}`}>{x.match ? "Yes" : "No"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ))}
+    </div>
   );
 }
