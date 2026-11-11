@@ -143,7 +143,7 @@ The end-to-end script drives the gateway as an agent would. It covers the approv
 - [`src/lib/llm.ts`](src/lib/llm.ts): mandate compiler, product classifier, problem analysis (Claude)
 - [`src/app/api/mcp`](src/app/api/mcp/route.ts): the gateway's MCP server
 - [`src/lib/stores/merchant.ts`](src/lib/stores/merchant.ts): the merchant side: order intake, returns agent, dispute agent
-- [`src/app/stores`](src/app/stores): the two demo merchants
+- [`src/app/stores`](src/app/stores): the three demo merchants
 
 Stack: Next.js 15, TypeScript, PostgreSQL with Drizzle, the Model Context Protocol, Claude, deployed on Vercel with Neon.
 
