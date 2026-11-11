@@ -13,6 +13,7 @@ import { best, evaluate, type Classification, type Decision } from "./policy";
 import { fetchProduct, type ProductSnapshot } from "./product";
 import { normalizeRules, type MandateRules, type MandateRulesInput } from "./rules";
 import { STORES } from "./stores/catalog";
+import { storePublicKey } from "./stores/store-key";
 
 const { purchases, mandates, merchants, paypalLinks, agents, cases, users } = schema;
 /** Purchases that count against a mandate's budget. Refunded money goes back to the budget. */
@@ -33,7 +34,9 @@ export const ensureSeed = () => (seeded ??= (async () => {
   for (const s of STORES.filter((x) => x.builtin !== false)) {
     const payee = storePayee(s.slug);
     const base = `${appUrl()}/stores/${s.slug}`;
-    const row = { name: s.name, baseUrl: base, verified: s.verified, paypalMerchantId: payee.merchantId, paypalEmail: payee.email, source: "builtin" as const, ordersUrl: `${base}/api/orders`, returnsUrl: `${base}/api/returns`, supportsHold: true };
+    const row = { name: s.name, baseUrl: base, verified: s.verified, paypalMerchantId: payee.merchantId, paypalEmail: payee.email, source: "builtin" as const, ordersUrl: `${base}/api/orders`, returnsUrl: `${base}/api/returns`, supportsHold: true,
+      // The stores that run inside this app sign what they send to the gateway, so their public key is always on file.
+      signingKey: storePublicKey(s.slug) };
     // "Verified" is seeded once. After that it is the operator's decision and a restart must not overwrite it.
     const { verified: _seedOnly, ...keep } = row;
     void _seedOnly;

@@ -9,6 +9,7 @@ import { publicKeyPem, verifyBundle, type LedgerRow } from "../ledger";
 import { acceptClaim, addTracking, adjudicate, getDispute, listDisputes, provideEvidence, refundCapture, sendDisputeMessage, voidHold, type Dispute } from "../paypal";
 import { textPdf } from "../pdf";
 import { getProduct } from "./catalog";
+import { storeSignature } from "./store-key";
 
 const { storeOrders } = schema;
 /** A real merchant pins this from the gateway's /.well-known/mandate-gateway.json. */
@@ -51,8 +52,9 @@ export async function shipOrder(slug: string, orderId: string, shippedSku: strin
   const tracking = `STR${Date.now().toString(36).toUpperCase()}`;
   let captureId = before.paypalCaptureId;
   if (before.status === "held") {
-    const res = await fetch(`${appUrl()}/api/merchant/shipments`, { method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ purchaseId: before.gatewayPurchaseId, authorizationId: before.authorizationId, tracking }), signal: AbortSignal.timeout(40_000) });
+    // The store signs the request with its own key, so nobody who merely learns these ids can have the buyer charged.
+    const path = "/api/merchant/shipments", body = JSON.stringify({ purchaseId: before.gatewayPurchaseId, authorizationId: before.authorizationId, tracking });
+    const res = await fetch(`${appUrl()}${path}`, { method: "POST", headers: { "Content-Type": "application/json", ...storeSignature(slug, { method: "POST", path, body }) }, body, signal: AbortSignal.timeout(40_000) });
     const j = (await res.json()) as { entry?: LedgerRow; captureId?: string; error?: string };
     if (!res.ok || !j.entry || !j.captureId) throw new Error(j.error ?? "The gateway did not charge the reserved payment");
     const v = verifyBundle({ publicKey: pinnedGatewayKey(), entries: [j.entry] }, pinnedGatewayKey());
@@ -198,7 +200,8 @@ export function evidencePdf(o: typeof storeOrders.$inferSelect, b: Bundle, dispu
 
 async function gatewayEvidence(o: typeof storeOrders.$inferSelect, disputeId: string): Promise<Bundle | null> {
   try {
-    const res = await fetch(`${appUrl()}/api/merchant/evidence/${o.gatewayPurchaseId}?capture=${o.paypalCaptureId}&dispute=${disputeId}`, { signal: AbortSignal.timeout(15_000), cache: "no-store" });
+    const path = `/api/merchant/evidence/${o.gatewayPurchaseId}?capture=${o.paypalCaptureId}&dispute=${disputeId}`;
+    const res = await fetch(`${appUrl()}${path}`, { headers: storeSignature(o.storeSlug, { method: "GET", path }), signal: AbortSignal.timeout(15_000), cache: "no-store" });
     if (!res.ok) return null;
     const b = (await res.json()) as Bundle;
     return verifyBundle(b, pinnedGatewayKey()).ok ? b : null;

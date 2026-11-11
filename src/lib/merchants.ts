@@ -7,6 +7,7 @@ import { ensureSeed } from "./gateway";
 import { newId } from "./ids";
 import { append } from "./ledger";
 import { payeeProblem } from "./paypal";
+import { readSigningKey } from "./stores/sign-request";
 
 const { merchants, merchantClaims } = schema;
 const newToken = () => `mandate-verify-${newId("t").slice(2)}${newId("t").slice(2)}`;
@@ -54,7 +55,9 @@ export async function ownershipToken(userId: string, m: typeof merchants.$inferS
   return { token: made?.token ?? null, claiming: true };
 }
 
-type WellKnown = { mandate_verification?: string; name?: string; paypal?: { merchant_id?: string; email?: string }; orders_url?: string; returns_url?: string; catalog_url?: string; holds?: boolean };
+type WellKnown = { mandate_verification?: string; name?: string; paypal?: { merchant_id?: string; email?: string }; orders_url?: string; returns_url?: string; catalog_url?: string; holds?: boolean;
+  /** Optional. An Ed25519 public key as SPKI PEM. Once published, the store's requests to the gateway must be signed with it. */
+  signing_key?: string };
 
 /** Step 2: fetch the store's well-known file and check the token. Only then does it become payable. */
 export async function verifyMerchantDomain(userId: string, merchantId: string) {
@@ -76,6 +79,10 @@ export async function verifyMerchantDomain(userId: string, merchantId: string) {
   if (!payee.paypalMerchantId && !payee.paypalEmail) throw new Error("The file must name the store's PayPal account under paypal.merchant_id or paypal.email");
   const problem = await payeeProblem({ merchantId: payee.paypalMerchantId, email: payee.paypalEmail });
   if (problem) throw new Error(`${problem} Put the store's own PayPal business account under "paypal" in the file (merchant_id or email), then check again.`);
+  const signingKey = file.signing_key == null || file.signing_key === "" ? null : readSigningKey(file.signing_key);
+  if (file.signing_key && !signingKey) throw new Error('"signing_key" in the file is not an Ed25519 public key in PEM form (it starts with "-----BEGIN PUBLIC KEY-----"). Fix it or leave it out, then check again.');
+  // A key that is replaced or withdrawn changes who can speak for the store, so it is treated like a change of payee.
+  const signingKeyChanged = !!m.domainVerifiedAt && !!m.signingKey && m.signingKey !== signingKey;
   const payeeChanged = !!m.domainVerifiedAt && (m.paypalMerchantId !== payee.paypalMerchantId || m.paypalEmail !== payee.paypalEmail);
   // Callback URLs must live under the store's own verified base URL.
   const under = (v: string | undefined) => (typeof v === "string" && (v === m.baseUrl || v.startsWith(`${m.baseUrl}/`)) ? v : null);
@@ -83,12 +90,13 @@ export async function verifyMerchantDomain(userId: string, merchantId: string) {
     // Whoever published their token is the registrant from now on.
     registeredBy: userId, verificationToken: expected,
     // A store that changes where its money goes is reviewed again before "verified stores only" mandates pay it.
-    ...(payeeChanged ? { verified: false } : {}),
+    ...(payeeChanged || signingKeyChanged ? { verified: false } : {}), signingKey,
     // A store may take reserved payments only if it can be told about orders, since that is how it learns to ship and to release.
     supportsHold: file.holds === true && !!under(file.orders_url), domainVerifiedAt: new Date() })
     .where(eq(merchants.id, m.id)).returning();
   await db.delete(merchantClaims).where(eq(merchantClaims.merchantId, m.id));
-  await append({ userId, type: "merchant.verified", payload: { merchantId: m.id, baseUrl: m.baseUrl, name: row.name, payee, ...(claim ? { registrantChanged: true } : {}), ...(payeeChanged ? { payeeChanged: true, verificationWithdrawn: m.verified } : {}) } });
+  await append({ userId, type: "merchant.verified", payload: { merchantId: m.id, baseUrl: m.baseUrl, name: row.name, payee, ...(claim ? { registrantChanged: true } : {}), ...(payeeChanged ? { payeeChanged: true } : {}),
+    signsRequests: !!signingKey, ...(signingKeyChanged ? { signingKeyChanged: true } : {}), ...(payeeChanged || signingKeyChanged ? { verificationWithdrawn: m.verified } : {}) } });
   return row;
 }
 
@@ -139,6 +147,8 @@ export async function listMerchants(userId?: string) {
     registeredByMe: !!userId && m.registeredBy === userId,
     /** This browser has asked to manage a store someone else registered, and has not yet published its token. */
     claiming: !!userId && m.registeredBy !== userId && !!claimFor(m.id), wellKnownUrl: m.source === "onboarded" ? `${m.baseUrl}${WELL_KNOWN}` : null,
+    /** The store has a signing key on file, so the gateway refuses requests from it that are not signed with that key. */
+    signsRequests: !!m.signingKey,
     domainVerifiedAt: m.domainVerifiedAt?.toISOString() ?? null, createdAt: m.createdAt.toISOString(),
   }));
 }

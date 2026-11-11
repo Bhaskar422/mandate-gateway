@@ -1,4 +1,4 @@
-import { createPrivateKey, createPublicKey, generateKeyPairSync, sign, verify } from "node:crypto";
+import { createPrivateKey, createPublicKey, generateKeyPairSync, hkdfSync, sign, verify } from "node:crypto";
 import { asc, desc, eq, sql } from "drizzle-orm";
 import { db, schema, type Tx } from "./db";
 import { canonical, sha256 } from "./ids";
@@ -22,6 +22,13 @@ function keys() {
   return { priv, pub: createPublicKey(priv) };
 }
 export const publicKeyPem = () => keys().pub.export({ type: "spki", format: "pem" }) as string;
+/**
+ * 32 bytes derived from the gateway's signing key for one named purpose (HKDF-SHA256). The demo stores that run
+ * inside this app get their own keys this way, so they need no secret of their own. Without LEDGER_SIGNING_KEY it
+ * follows the in-memory development key, so it changes when the process restarts.
+ */
+export const derivedSecret = (purpose: string) =>
+  new Uint8Array(hkdfSync("sha256", keys().priv.export({ type: "pkcs8", format: "der" }), new Uint8Array(0), purpose, 32));
 
 const entryHash = (prevHash: string, e: { userId: string; purchaseId: string | null; type: string; payload: unknown; at: string }) =>
   sha256(`${prevHash}\n${canonical({ userId: e.userId, purchaseId: e.purchaseId, type: e.type, payload: e.payload, at: e.at })}`);

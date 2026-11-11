@@ -229,11 +229,12 @@ export default function DevelopersPage() {
 
         <section aria-labelledby="merchants" className="space-y-4">
           <H2 id="merchants">For stores</H2>
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
             {[
               { t: "Join the registry", b: <>Publish <span className="code">/.well-known/mandate-merchant.json</span> on your site with the token the gateway issues, your PayPal payee and where to send orders and refund requests. A user starts this on the <Link href="/merchants" className="link">Merchants page</Link>.</> },
               { t: "Check an agent before checkout", b: <>An agent can show you a short-lived <a href="#credential" className="link">mandate credential</a>. Verify it offline against the gateway&apos;s public key and answer with what you sell that fits. It authorises nothing by itself; the gateway still decides and pays.</> },
               { t: "Settle on the signed record", b: <>Paid orders and refund requests arrive with ledger entries signed by the gateway. Verify them against <span className="code">/.well-known/mandate-gateway.json</span>, or paste a record into the <Link href="/verify" className="link">public verifier</Link>.</> },
+              { t: "Sign what you send the gateway", b: <>Add <span className="code">signing_key</span> (an Ed25519 public key, SPKI PEM) to your well-known file. The gateway then refuses any request in your name that lacks <span className="code">Mandate-Store-Signature</span>, <span className="code">Mandate-Store-Timestamp</span> and <span className="code">Mandate-Store-Request-Id</span>. The signature is Ed25519 over five lines joined by newlines: the method, the path with its query string, the SHA-256 of the body in hex, the timestamp in Unix seconds, and the request id. Timestamps more than five minutes off and repeated request ids get <span className="code">401</span>. This covers <span className="code">POST /api/merchant/shipments</span> and <span className="code">GET /api/merchant/evidence/&lt;purchase&gt;</span>. A store with no key is accepted as before.</> },
             ].map((x) => (
               <div key={x.t} className="card p-4">
                 <h3 className="font-semibold text-ink">{x.t}</h3>
