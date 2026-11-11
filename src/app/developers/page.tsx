@@ -157,6 +157,7 @@ export default function DevelopersPage() {
           <H2 id="results">Agent test results</H2>
           <p className="max-w-3xl text-base text-ink-2">The same scenarios, run through agents built on different frameworks and architectures against this gateway. The point is that the outcome does not depend on how well-behaved the agent is.</p>
           <ResultsMatrix results={agentResults} />
+          <p className="text-sm text-ink-2"><Link href="/developers/tests" className="link">See every test run and what the agent did in it</Link>, with the comparison against the same agents without the gateway.</p>
         </section>
       </div>
     </PublicShell>

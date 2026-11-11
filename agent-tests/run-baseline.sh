@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 # Baseline: the same agents and catalogue WITHOUT the gateway, paying with the PayPal Agent Toolkit (sandbox).
 #
-#   agent-tests/run-baseline.sh                         # 2 conditions x 3 models x 5 scenarios x 3 runs, then the report
+#   agent-tests/run-baseline.sh                         # 3 architectures x 2 conditions x 3 models x 5 scenarios, then the report
 #   agent-tests/run-baseline.sh --only-missing          # only cells that are absent or ended in an error
 #   agent-tests/run-baseline.sh --model gemini-flash-latest --concurrency 1 --runs 3
 #
-# Options go to ts/baseline/run.ts: --model, --condition plain,hardened, --scenario, --runs, --concurrency, --only-missing.
+# Options go to ts/baseline/run.ts: --architecture single,planner_executor,multi_agent, --model, --condition plain,hardened,
+# --scenario, --runs (3), --injection-runs (5, in the two multi-agent architectures), --concurrency, --only-missing.
 # The test gateway is started only to serve the store catalogues; the baseline agents never talk to the gateway itself.
 set -uo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
