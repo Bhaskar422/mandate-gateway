@@ -1,12 +1,15 @@
 // End-to-end check of every demo path against a running dev server.
 // User-side steps call the library directly; agent-side steps go over MCP exactly as a real agent would.
+import { generateKeyPairSync } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { db, schema } from "../src/lib/db";
 import { answerOffer, confirmMandate, createAgent, decideApproval, resumeAgent, rotateAgentKey, setFrozen, updateSettings } from "../src/lib/gateway";
-import { registerMerchant, verifyMerchantDomain } from "../src/lib/merchants";
+import { listMerchants, registerMerchant, verifyMerchantDomain } from "../src/lib/merchants";
 import { llmConfigured } from "../src/lib/config";
 import { verifyChain } from "../src/lib/ledger";
 import { publishVerificationToken, shipOrder } from "../src/lib/stores/merchant";
+import { signRequest } from "../src/lib/stores/sign-request";
+import { storeSignature } from "../src/lib/stores/store-key";
 import { newId } from "../src/lib/ids";
 
 const BASE = process.env.APP_URL ?? "http://localhost:3000";
@@ -194,6 +197,41 @@ async function main() {
   // Leave nothing captured: cancel the Peak order while it is still unshipped.
   const cancel = await mcp(G, "report_problem", { purchase_id: peak.purchase_id, description: "Please cancel this order, I no longer need it." }, otherKey);
   check("an unshipped order at the onboarded store is cancelled and refunded", cancel.status === "refunded", cancel.message);
+
+  // ---- A store signs what it sends the gateway --------------------------------------------------
+  // The script signs as Stride with the key derived from LEDGER_SIGNING_KEY, so it must run with the same key as the server.
+  check("the stores inside the app have a signing key on file", (await listMerchants()).filter((m) => m.source === "builtin").every((m) => m.signsRequests));
+  const shipper = newId("usr_e2e_ship_user");
+  await db.insert(schema.users).values({ id: shipper });
+  await db.insert(schema.paypalLinks).values({ userId: shipper, vaultId: process.env.E2E_VAULT_ID ?? "SIM-VAULT-E2E", status: "active", payerEmail: "e2e-ship@example.com" });
+  await updateSettings(shipper, { chargeOnShipment: true });
+  await confirmMandate(shipper, "Up to $100 on running shoes, known merchants only.", { summary: "Up to $100 on running shoes from verified merchants.", currency: "USD", totalLimitCents: 10000,
+    allowedCategories: ["running shoes"], merchantPolicy: "verified_only", expiresAt: new Date(Date.now() + 864e5).toISOString() });
+  const { key: shipKey } = await createAgent(shipper, "e2e shipping agent");
+  let held = await mcp(G, "request_purchase", { product_url: tempo.url, expected_price: 89, user_request: ask, reason: "Road running shoe at $89" }, shipKey);
+  if (held.status === "pending_approval") { await decideApproval(shipper, held.purchase_id, true); held = await mcp(G, "check_status", { purchase_id: held.purchase_id }, shipKey); }
+  check("a purchase is reserved until the store ships", held.status === "authorized", `${held.status}: ${held.message}`);
+  if (held.status === "authorized") {
+    const heldOrder = await storeOrder(held.purchase_id);
+    const path = "/api/merchant/shipments", report = JSON.stringify({ purchaseId: held.purchase_id, authorizationId: heldOrder.authorizationId, tracking: "E2E-TRACK" });
+    const send = async (headers: Record<string, string>) => { const r = await fetch(`${BASE}${path}`, { method: "POST", headers: { "Content-Type": "application/json", ...headers }, body: report }); return { status: r.status, json: await r.json() }; };
+    const purchaseStatus = async () => (await db.select().from(schema.purchases).where(eq(schema.purchases.id, held.purchase_id)))[0].status;
+    const unsigned = await send({});
+    check("an unsigned shipment report from a store that signs is refused", unsigned.status === 401 && unsigned.json.code === "missing_signature", `${unsigned.status}: ${unsigned.json.error}`);
+    const stranger = await send(signRequest(generateKeyPairSync("ed25519").privateKey, { method: "POST", path, body: report }));
+    check("a shipment report signed with an unknown key is refused", stranger.status === 401 && stranger.json.code === "bad_signature", `${stranger.status}: ${stranger.json.error}`);
+    const neighbour = await send(storeSignature("kickz", { method: "POST", path, body: report }));
+    check("a shipment report signed with another store's key is refused", neighbour.status === 401 && neighbour.json.code === "bad_signature", `${neighbour.status}: ${neighbour.json.error}`);
+    check("the refused reports charged nothing", (await purchaseStatus()) === "authorized");
+    // Ship the wrong item so the order can be refunded afterwards and nothing is left captured.
+    const sent = await shipOrder("stride", heldOrder.id, "STR-SOCK3").then((o) => o?.status ?? "not shipped", (e) => String(e.message));
+    check("the store's own signed shipment report is accepted and the buyer is charged", sent === "shipped" && (await purchaseStatus()) === "captured", sent);
+    const again = storeSignature("stride", { method: "POST", path, body: report });
+    const retry = await send(again), replay = await send(again);
+    check("a signed retry gets the same capture record, and replaying that exact request is refused", retry.status === 200 && !!retry.json.captureId && replay.status === 401 && replay.json.code === "replayed", `${retry.status} then ${replay.status}`);
+    const undo = await mcp(G, "report_problem", { purchase_id: held.purchase_id, description: "I ordered running shoes but a pack of socks arrived." }, shipKey);
+    check("the shipped order is refunded, leaving nothing captured", undo.status === "refunded", undo.message);
+  }
 
   // ---- Credentials, key rotation, public ledger head ---------------------------------------------
   const cred = await rest("GET", "/mandate/credential", key);

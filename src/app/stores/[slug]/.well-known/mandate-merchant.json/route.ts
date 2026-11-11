@@ -2,6 +2,7 @@ import { eq } from "drizzle-orm";
 import { appUrl, storePayee } from "@/lib/config";
 import { db, schema } from "@/lib/db";
 import { getStore } from "@/lib/stores/catalog";
+import { storePublicKey } from "@/lib/stores/store-key";
 
 // What a merchant publishes on its own site to join the gateway: proof of domain control, its PayPal payee,
 // and where the gateway should send paid orders and return requests.
@@ -16,5 +17,7 @@ export async function GET(_: Request, { params }: { params: Promise<{ slug: stri
     mandate_verification: settings?.verificationToken ?? null, name: s.name,
     paypal: { ...(payee.merchantId ? { merchant_id: payee.merchantId } : {}), ...(payee.email ? { email: payee.email } : {}) },
     orders_url: `${base}/api/orders`, returns_url: `${base}/api/returns`,
+    // The public half of the key this store signs its requests to the gateway with.
+    signing_key: storePublicKey(slug),
   });
 }

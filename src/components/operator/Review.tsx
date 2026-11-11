@@ -1,5 +1,5 @@
 "use client";
-import { BadgeCheck, ExternalLink, LogOut, ShieldCheck, Trash2 } from "lucide-react";
+import { BadgeCheck, ExternalLink, KeyRound, LogOut, ShieldCheck, Trash2, Unlock } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { clearDemoWalletAction, operatorSignInAction, operatorSignOutAction, removeMerchantAction, reviewMerchantAction, setDemoWalletAction } from "@/app/actions";
@@ -24,6 +24,10 @@ function Row({ m, onChange }: { m: MerchantView; onChange: () => void }) {
           <p className="mt-1 text-sm text-ink-3">
             {m.source === "builtin" ? "Ships with the gateway." : m.domainVerifiedAt ? <>Proved ownership <LocalTime iso={m.domainVerifiedAt} format="date" />.</> : <>Address entered <LocalTime iso={m.createdAt} format="date" />; ownership not proved.</>}
             {" "}{m.payable ? "PayPal payee on file." : "No PayPal payee on file."}
+          </p>
+          <p className="mt-1 inline-flex items-center gap-1.5 text-sm text-ink-3" title={m.signsRequests ? "This store published a signing key. The gateway refuses requests from it that are not signed with that key." : "This store has not published a signing key, so its requests to the gateway are accepted on the payment ids alone."}>
+            {m.signsRequests ? <KeyRound size={13} className="shrink-0 text-ink-2" aria-hidden /> : <Unlock size={13} className="shrink-0" aria-hidden />}
+            {m.signsRequests ? "Signs its requests" : "Unsigned"}
           </p>
         </div>
         <Badge tone={t.tone} icon={t.icon}>{t.label}</Badge>

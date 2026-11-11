@@ -88,8 +88,17 @@ export const merchants = pgTable("merchants", {
   supportsHold: boolean("supports_hold").notNull().default(false),
   /** Where the store publishes its products as JSON, for agents to search. */
   catalogUrl: text("catalog_url"),
+  /** The Ed25519 public key (SPKI PEM) the store published. While set, the store's requests to the gateway must be signed with it. */
+  signingKey: text("signing_key"),
   createdAt: ts("created_at").notNull().defaultNow(),
 });
+
+/** Request ids already used by stores that sign their requests, so a captured request cannot be sent a second time. */
+export const storeRequestIds = pgTable("store_request_ids", {
+  merchantId: text("merchant_id").notNull(),
+  requestId: text("request_id").notNull(),
+  seenAt: ts("seen_at").notNull().defaultNow(),
+}, (t) => [primaryKey({ columns: [t.merchantId, t.requestId] })]);
 
 export type PurchaseStatus =
   | "blocked" | "pending_approval" | "declined" | "paying" | "captured" | "payment_failed" | "authorized" | "cancelled"
