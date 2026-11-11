@@ -1,10 +1,11 @@
-# Local-only folders that a deploy from this machine must not upload. Deploys from GitHub are not affected.
-agent-tests
-.claude
-.pgdata
-.next
-.next-build
-.next-agent-tests
-docs
-scripts
-tests
+# Local-only folders at the top of the project that a deploy must not upload. The leading slash matters:
+# without it a rule such as "tests" would also drop src/app/developers/tests.
+/agent-tests
+/.claude
+/.pgdata
+/.next
+/.next-build
+/.next-agent-tests
+/docs
+/scripts
+/tests
