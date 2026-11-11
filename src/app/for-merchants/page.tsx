@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import MerchantPortal from "@/components/merchants/Portal";
 import PublicShell from "@/components/shell/PublicShell";
 import { appUrl } from "@/lib/config";
+import { insightsForRegistrant } from "@/lib/merchant-insights";
 import { listMerchants } from "@/lib/merchants";
 import { currentUserId } from "@/lib/session";
 
@@ -11,6 +12,8 @@ export const maxDuration = 60; // proving ownership fetches a file from the stor
 
 /** The merchant's side of the gateway. It shares nothing with a shopper's dashboard except the registry itself. */
 export default async function ForMerchantsPage() {
-  const merchants = await listMerchants(await currentUserId());
-  return <PublicShell width="max-w-[960px]"><MerchantPortal merchants={merchants} appUrl={appUrl()} /></PublicShell>;
+  const userId = await currentUserId();
+  // Insights are loaded only for stores this browser registered; the check is on merchants.registeredBy, on the server.
+  const [merchants, insights] = await Promise.all([listMerchants(userId), insightsForRegistrant(userId)]);
+  return <PublicShell width="max-w-[960px]"><MerchantPortal merchants={merchants} insights={insights} appUrl={appUrl()} /></PublicShell>;
 }

@@ -2,12 +2,14 @@ import { desc, eq } from "drizzle-orm";
 import { ExternalLink, Handshake, Inbox, Scale } from "lucide-react";
 import { money, type Tone } from "@/components/format";
 import LocalTime from "@/components/LocalTime";
+import Insights from "@/components/merchants/Insights";
 import { DisputeSync, OrderActions, PublishToken } from "@/components/stores/BackOfficeActions";
 import { storeTheme } from "@/components/stores/storeThemes";
 import { Badge } from "@/components/ui/Badge";
 import { EmptyState, Fact } from "@/components/ui/Layout";
 import { appUrl, storeCreds } from "@/lib/config";
 import { db, schema } from "@/lib/db";
+import { merchantInsights } from "@/lib/merchant-insights";
 import { listMerchants } from "@/lib/merchants";
 import { getStore } from "@/lib/stores/catalog";
 
@@ -34,7 +36,9 @@ export default async function StoreAdmin({ params }: { params: Promise<{ slug: s
     listMerchants(),
   ]);
   const name = (sku: string | null) => s.products.find((p) => p.sku === sku)?.name ?? sku ?? "";
-  const reg = REGISTRY[merchants.find((m) => m.baseUrl === base)?.trust ?? "none"];
+  const merchant = merchants.find((m) => m.baseUrl === base);
+  const reg = REGISTRY[merchant?.trust ?? "none"];
+  const insights = merchant ? await merchantInsights(merchant.id) : null;
   const open = orders.filter((o) => o.status === "paid" || o.status === "held").length;
 
   return (
@@ -42,13 +46,20 @@ export default async function StoreAdmin({ params }: { params: Promise<{ slug: s
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="eyebrow">Back office</p>
-          <h1 className={`mt-1 text-3xl text-ink ${t.heading}`}>Orders</h1>
+          <h1 className={`mt-1 text-3xl text-ink ${t.heading}`}>Orders and agent sales</h1>
           <p className="mt-1 text-base text-ink-2">{orders.length === 0 ? "Paid orders from the Mandate gateway arrive here." : `${orders.length} ${orders.length === 1 ? "order" : "orders"}, ${open} waiting to ship.`}</p>
         </div>
         <DisputeSync slug={slug} enabled={!!storeCreds(slug)} />
       </header>
 
+      <section aria-label="Agent sales">
+        <h2 className={`text-xl text-ink ${t.heading}`}>Agent sales</h2>
+        <p className="mb-4 mt-1 max-w-2xl text-base text-ink-2">What shopping agents asked this store for through the Mandate gateway, and what came of it.</p>
+        {insights ? <Insights insights={insights} /> : <p className="text-base text-ink-3">This store is not in the gateway&apos;s registry yet, so there are no agent requests to count.</p>}
+      </section>
+
       <section aria-label="Orders">
+        <h2 className={`mb-4 text-xl text-ink ${t.heading}`}>Orders</h2>
         {orders.length === 0 ? (
           <EmptyState icon={<Inbox size={18} aria-hidden />} title="No orders yet">When an agent buys from this shop through the gateway, the paid order appears here with the gateway&apos;s signed payment record.</EmptyState>
         ) : (
