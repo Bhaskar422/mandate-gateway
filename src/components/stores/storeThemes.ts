@@ -40,7 +40,7 @@ const THEMES: Record<string, StoreTheme> = {
     heading: "font-sans font-black uppercase italic tracking-tight", radius: "rounded-none", wordmark: "Kickz",
     heroEyebrow: "Flash sale ends tonight", heroTitle: "Big-name looks. Outlet prices.",
     heroBody: "New drops every week. When they are gone, they are gone.",
-    heroPhoto: "1552346154-21d32810aba3", gridTitle: "Today's deals",
+    heroPhoto: "1631377816476-46b74bb0f3e8", gridTitle: "Today's deals",
     perks: [
       { title: "Up to 80% off", body: "Every pair, every day." },
       { title: "Ships worldwide", body: "From overseas in 15 to 30 days." },

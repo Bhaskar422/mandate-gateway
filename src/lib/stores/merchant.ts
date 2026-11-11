@@ -64,6 +64,17 @@ export async function shipOrder(slug: string, orderId: string, shippedSku: strin
   return o ?? null;
 }
 
+/**
+ * What this store's own order book says about one order: what was ordered, whether and what it shipped, and the
+ * tracking number. The gateway asks for it when a buyer has a complaint, so both records can be compared before
+ * anyone opens a dispute. The caller proves it holds the order by presenting the PayPal capture id.
+ */
+export async function orderStatement(slug: string, body: { purchaseId?: string; captureId?: string }) {
+  const [o] = await db.select().from(storeOrders).where(and(eq(storeOrders.storeSlug, slug), eq(storeOrders.gatewayPurchaseId, body.purchaseId ?? "")));
+  if (!o || !o.paypalCaptureId || o.paypalCaptureId !== body.captureId) return null;
+  return { status: o.status, orderedSku: o.sku, shippedSku: o.shippedSku, tracking: o.tracking, replacementSent: !!o.replacementSku };
+}
+
 /** The buyer cancelled a reserved order before it shipped. The store releases the reservation with its own PayPal account. */
 export async function cancelHeldOrder(slug: string, body: { purchaseId?: string; authorizationId?: string }) {
   const [o] = await db.select().from(storeOrders).where(and(eq(storeOrders.storeSlug, slug), eq(storeOrders.gatewayPurchaseId, body.purchaseId ?? "")));

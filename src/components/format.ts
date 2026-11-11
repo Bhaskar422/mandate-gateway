@@ -96,6 +96,7 @@ export const LEDGER: Record<string, { title: string; tone: Tone }> = {
   "payment.captured": { title: "PayPal payment completed", tone: "ok" },
   "payment.authorized": { title: "Money reserved at PayPal, not yet charged", tone: "info" },
   "payment.voided": { title: "Reservation released, nothing charged", tone: "neutral" },
+  "claim.assessed": { title: "Complaint checked against both records", tone: "info" },
   "payment.failed": { title: "PayPal payment failed", tone: "bad" },
   "problem.reported": { title: "You reported a problem", tone: "warn" },
   "refund.requested": { title: "Refund requested from the store", tone: "info" },

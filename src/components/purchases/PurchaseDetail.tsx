@@ -11,6 +11,7 @@ import Banner from "../ui/Banner";
 import { CopyButton } from "../ui/Copy";
 import { Fact, Section } from "../ui/Layout";
 import ChecksList from "./ChecksList";
+import ClaimAssessment from "./ClaimAssessment";
 import DecisionReveal from "./DecisionReveal";
 import EvidenceTimeline, { type EvidenceEntry } from "./EvidenceTimeline";
 import InjectionWarning from "./InjectionWarning";
@@ -72,7 +73,7 @@ export default function PurchaseDetail({ basics, entries, verification }: { basi
           </div>
         )}
 
-        {p && (p.status === "pending_approval" || p.status === "captured" || p.status === "authorized" || p.case?.status === "offer_pending") && (
+        {p && (p.status === "pending_approval" || (p.status === "captured" && !!p.case) || p.status === "authorized" || p.case?.status === "offer_pending") && (
           <div className="mt-5 space-y-3 border-t border-line pt-5">
             {p.status === "pending_approval" && <>
               <p className="text-base text-ink-2">This purchase is waiting for you. Approving pays the store from your PayPal account right away; your mandate&apos;s limits are checked again first.</p>
@@ -80,7 +81,7 @@ export default function PurchaseDetail({ basics, entries, verification }: { basi
             </>}
             <CancelHold p={p} />
             {p.case?.status === "offer_pending" && <OfferCard p={p} />}
-            <ReportProblem p={p} />
+            {p.case && <ReportProblem p={p} />}
           </div>
         )}
       </header>
@@ -91,6 +92,7 @@ export default function PurchaseDetail({ basics, entries, verification }: { basi
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
         <div className="space-y-6">
+          {p && !p.case && <ClaimAssessment p={p} />}
           {p?.case && (
             <Section title="Settlement" hint={`Your agent and ${p.merchant ?? "the store"}'s agent worked this out on the signed record.`}>
               <div className="card p-4 sm:p-5">

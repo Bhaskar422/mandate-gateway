@@ -12,6 +12,7 @@ import { draftMandate } from "@/lib/llm";
 import { reviewDraft, type MandateQuestion } from "@/lib/mandate-check";
 import { mandateExamples, type MandateExample } from "@/lib/mandate-examples";
 import { ownershipToken, registerMerchant, removeMerchant, setMerchantVerified, verifyMerchantDomain } from "@/lib/merchants";
+import { assessClaim, type Assessment, type ClaimKind } from "@/lib/assess";
 import { reconcilePurchase, type ReconcileRow } from "@/lib/reconcile";
 import { operatorSignIn, operatorSignOut, requireOperator } from "@/lib/operator";
 import { MandateRulesSchema, type MandateRules } from "@/lib/rules";
@@ -113,6 +114,10 @@ export async function approvalAction(purchaseId: string, approve: boolean): Prom
 /** Cancel a reserved purchase before the store ships it. Nothing is charged. */
 export async function cancelHoldAction(purchaseId: string): Promise<R> {
   try { await cancelHold(await currentUserId(), purchaseId); return done(); } catch (e) { return fail(e); }
+}
+/** Compare the gateway's record with the store's own, for one kind of complaint. Moves no money. */
+export async function assessClaimAction(purchaseId: string, claim: ClaimKind): Promise<R<{ assessment: Assessment }>> {
+  try { const assessment = await assessClaim(await currentUserId(), purchaseId, claim); revalidatePath("/", "layout"); return { ok: true, assessment }; } catch (e) { return fail(e); }
 }
 /** Compare the gateway's record of a purchase with PayPal's own record of the order. Changes nothing. */
 export async function reconcilePurchaseAction(purchaseId: string): Promise<R<{ rows: ReconcileRow[]; allMatch: boolean; checkedAt: string; note?: string }>> {
