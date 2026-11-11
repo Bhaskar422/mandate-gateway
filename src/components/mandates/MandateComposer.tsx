@@ -2,6 +2,7 @@
 import { ArrowLeft, PenLine, Sparkles, TriangleAlert, X } from "lucide-react";
 import { useState } from "react";
 import { compileMandateAction, confirmMandateAction } from "@/app/actions";
+import type { MandateQuestion } from "@/lib/mandate-check";
 import type { MandateRules } from "@/lib/rules";
 import type { MandateView } from "@/lib/views";
 import { useAccount } from "../AccountProvider";
@@ -24,13 +25,24 @@ export default function MandateComposer({ replace, onClose, onConfirmed }: { rep
   const { state } = useAccount();
   const compile = useAction(compileMandateAction), confirm = useAction(confirmMandateAction);
   const [text, setText] = useState(replace?.sourceText ?? "");
-  const [draft, setDraft] = useState<{ rules: MandateRules; warnings: string[] } | null>(null);
+  const [draft, setDraft] = useState<{ rules: MandateRules; warnings: string[]; questions: MandateQuestion[] } | null>(null);
+  const [answers, setAnswers] = useState<Record<string, string>>({});
   const [name, setName] = useState(replace?.name ?? "");
   const [scoped, setScoped] = useState(!!replace?.agentIds?.length);
   const [agentIds, setAgentIds] = useState<string[]>(replace?.agentIds ?? []);
   const agents = state.agents.filter((a) => a.status !== "revoked");
 
-  const toRules = async (e: React.FormEvent) => { e.preventDefault(); const r = await compile.run(text); if (r) setDraft({ rules: r.rules, warnings: r.warnings }); };
+  const toRules = async (e: React.FormEvent) => { e.preventDefault(); const r = await compile.run(text); if (r) { setDraft({ rules: r.rules, warnings: r.warnings, questions: r.questions }); setAnswers({}); } };
+  // Answers become part of the mandate's own words, so the signed record shows exactly what the user said.
+  const answer = async () => {
+    const extra = (draft?.questions ?? []).map((q) => answers[q.id]?.trim()).filter(Boolean).join(" ");
+    if (!extra) return;
+    const next = `${text.trim()} ${extra}`.slice(0, 2000);
+    setText(next);
+    const r = await compile.run(next);
+    if (r) { setDraft({ rules: r.rules, warnings: r.warnings, questions: r.questions }); setAnswers({}); }
+  };
+  const mustAnswer = (draft?.questions ?? []).some((q) => q.required);
   const save = async () => {
     if (!draft) return;
     const r = await confirm.run(text, draft.rules, { name: name.trim() || undefined, agentIds: scoped && agentIds.length ? agentIds : null, replaceId: replace?.id });
@@ -74,6 +86,25 @@ export default function MandateComposer({ replace, onClose, onConfirmed }: { rep
             <blockquote className="quote mt-1 italic [overflow-wrap:anywhere]">“{text}”</blockquote>
           </figure>
           <p className="mt-4 text-base text-ink-2"><span className="font-semibold text-ink">The gateway understood:</span> {draft.rules.summary}</p>
+          {draft.questions.length > 0 && (
+            <div className="mt-4 rounded-[10px] border border-warn bg-warn-soft p-4">
+              <p className="font-semibold text-warn-ink">{mustAnswer ? "The gateway needs an answer before this can be confirmed" : "Your wording left something open"}</p>
+              {!mustAnswer && <p className="mt-0.5 text-sm text-ink-2">The rules below use the narrower reading. Answer to change them, or confirm them as they are.</p>}
+              <div className="mt-3 space-y-3">
+                {draft.questions.map((q) => (
+                  <div key={q.id}>
+                    <label htmlFor={`q-${q.id}`} className="field-label">{q.question}{q.required && <span className="font-normal text-warn-ink"> (required)</span>}</label>
+                    <input id={`q-${q.id}`} className="field" value={answers[q.id] ?? ""} maxLength={200} placeholder={q.hint} disabled={compile.pending}
+                      onChange={(e) => setAnswers((a) => ({ ...a, [q.id]: e.target.value }))} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); answer(); } }} />
+                  </div>
+                ))}
+              </div>
+              <div className="mt-3 flex flex-wrap items-center gap-3">
+                <Button variant="primary" size="sm" loading={compile.pending} loadingText="Updating the rules" disabled={!Object.values(answers).some((v) => v.trim())} onClick={answer}>Update the rules</Button>
+                {compile.error && <ErrorText>{compile.error}</ErrorText>}
+              </div>
+            </div>
+          )}
           {draft.warnings.map((w) => <Banner key={w} tone="warn" className="mt-3" icon={<TriangleAlert size={17} aria-hidden />}>{w}</Banner>)}
           <div className="mt-3"><RulesList rules={draft.rules} /></div>
           <p className="mt-2 text-sm text-ink-3">If a rule is not what you meant, change your wording and try again. These exact rules, not the sentence, are what gets enforced.</p>
@@ -98,7 +129,7 @@ export default function MandateComposer({ replace, onClose, onConfirmed }: { rep
           </div>
 
           <div className="mt-5 flex flex-wrap items-center gap-2">
-            <Button variant="primary" icon={<PenLine size={15} aria-hidden />} loading={confirm.pending} loadingText="Confirming" disabled={scoped && agentIds.length === 0} onClick={save}>{replace ? "Confirm and replace" : "Confirm mandate"}</Button>
+            <Button variant="primary" icon={<PenLine size={15} aria-hidden />} loading={confirm.pending} loadingText="Confirming" disabled={mustAnswer || (scoped && agentIds.length === 0)} onClick={save}>{replace ? "Confirm and replace" : "Confirm mandate"}</Button>
             <Button variant="quiet" icon={<ArrowLeft size={15} aria-hidden />} disabled={confirm.pending} onClick={() => { setDraft(null); confirm.clearError(); }}>Change the wording</Button>
           </div>
           {replace && <p className="mt-2 text-sm text-ink-3">The current mandate is revoked the moment this one is confirmed. Money already spent under it does not carry over.</p>}

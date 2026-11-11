@@ -34,6 +34,8 @@ export type PolicyInput = {
   paymentMethodLinked: boolean;
   /** Deterministic findings about the page: text aimed at AI agents, text hidden from shoppers. */
   pageSignals?: PageSignal[];
+  /** Stores on the never-buy list of any of the user's active mandates. "Never" holds whichever mandate is being used. */
+  neverBuy?: string[];
 };
 
 /**
@@ -80,9 +82,12 @@ export function evaluate(i: PolicyInput): Decision {
     });
   };
 
-  if ((r.blockedMerchants ?? []).length &&
-      !add("merchant_not_blocked", !named(r.blockedMerchants), named(r.blockedMerchants) ? `${m.name} is on the mandate's never-buy list` : `${m.name} is not on the never-buy list`))
-    return block(`The mandate says never to buy from ${m.name}.`);
+  const own = r.blockedMerchants ?? [], never = [...own, ...(i.neverBuy ?? [])];
+  if (never.length) {
+    const hit = named(never), elsewhere = hit && !named(own);
+    if (!add("merchant_not_blocked", !hit, hit ? `${m.name} is on ${elsewhere ? "the never-buy list of another of the user's mandates" : "the mandate's never-buy list"}` : `${m.name} is not on a never-buy list`))
+      return block(elsewhere ? `One of the user's mandates says never to buy from ${m.name}, and that holds for every mandate.` : `The mandate says never to buy from ${m.name}.`);
+  }
 
   if (r.merchantPolicy === "verified_only") {
     if (!add("merchant_verified", m.verified, m.verified ? `${m.name} is verified` : `${m.name} is not verified`))

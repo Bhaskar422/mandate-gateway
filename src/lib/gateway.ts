@@ -192,14 +192,17 @@ async function gather(agent: AgentRef, input: PurchaseInput) {
   const merchant = await resolveMerchant(input.productUrl);
   // The gateway only ever fetches pages under a registered merchant's base URL.
   const product = merchant ? await fetchProduct(input.productUrl) : null;
-  const candidates = await activeMandates(agent.userId, agent.id);
+  const everyMandate = await activeMandates(agent.userId);
+  const candidates = everyMandate.filter((m) => !m.agentIds || m.agentIds.includes(agent.id));
+  // "Never buy from X" is a prohibition, not a permission, so it applies whichever mandate a purchase would use.
+  const neverBuy = [...new Set(everyMandate.flatMap((m) => m.rules.blockedMerchants ?? []))];
   const classify = new Map<string, Classification | null>();
   if (product) for (const m of candidates) {
     const k = JSON.stringify(m.rules.allowedCategories);
     if (!classify.has(k)) classify.set(k, await classifyProduct(product, m.rules.allowedCategories));
   }
   const [link] = await db.select().from(paypalLinks).where(eq(paypalLinks.userId, agent.userId));
-  return { merchant, product, candidates, classify, link };
+  return { merchant, product, candidates, classify, link, neverBuy };
 }
 
 async function decide(t: Tx | typeof db, agent: AgentRef, input: PurchaseInput, g: Awaited<ReturnType<typeof gather>>, excludePurchaseId?: string) {
@@ -215,7 +218,7 @@ async function decide(t: Tx | typeof db, agent: AgentRef, input: PurchaseInput, 
     product: g.product ? { name: g.product.name, priceCents: g.product.priceCents, currency: g.product.currency } : null,
     quantity: input.quantity, agentExpectedPriceCents: input.expectedPriceCents,
     paymentMethodLinked: g.link?.status === "active" && !!g.link.vaultId,
-    pageSignals: g.product?.signals,
+    pageSignals: g.product?.signals, neverBuy: g.neverBuy,
   };
   if (!g.candidates.length) return { decision: { ...evaluate({ ...common, mandate: null, spend: { committedCents: 0, purchaseCount: 0 }, classification: null }), mandateId: null }, mandate: null, classification: null as Classification | null, spend: null };
   const all = [];

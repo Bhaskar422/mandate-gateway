@@ -87,7 +87,7 @@ export async function dashboardState(userId: string) {
     mandates,
     /** The newest active mandate, for components that show one. */
     mandate: mandates[0] ?? null,
-    pastMandates: mandateRows.filter((m) => m.status !== "active").slice(0, 10).map((m) => ({ id: m.id, name: m.name, sourceText: m.sourceText, status: m.status, confirmedAt: iso(m.confirmedAt) })),
+    pastMandates: mandateRows.filter((m) => m.status !== "active").map((m) => ({ id: m.id, name: m.name, sourceText: m.sourceText, status: m.status, confirmedAt: iso(m.confirmedAt) })),
     agents, purchases, merchants: merchantList,
     stats: {
       spentCents: rows.filter(paid).reduce((s, p) => s + p.amountCents - p.refundedCents, 0), refundedCents: rows.reduce((s, p) => s + p.refundedCents, 0),

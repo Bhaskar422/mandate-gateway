@@ -7,7 +7,8 @@ import { restartAssistant } from "@/lib/assistant";
 import type { UserSettings } from "@/lib/db/schema";
 import { answerOffer, confirmMandate, createAgent, decideApproval, decideByToken, pauseAgent, reportProblem, resolveMerchantNames, resumeAgent, revokeAgent, revokeMandate, rotateAgentKey, setFrozen, updateSettings } from "@/lib/gateway";
 import { publicKeyPem, verifyBundle, type LedgerRow } from "@/lib/ledger";
-import { compileMandate } from "@/lib/llm";
+import { draftMandate } from "@/lib/llm";
+import { reviewDraft, type MandateQuestion } from "@/lib/mandate-check";
 import { registerMerchant, removeMerchant, setMerchantVerified, verifyMerchantDomain } from "@/lib/merchants";
 import { operatorSignIn, operatorSignOut, requireOperator } from "@/lib/operator";
 import { MandateRulesSchema, type MandateRules } from "@/lib/rules";
@@ -21,26 +22,36 @@ const done = () => { revalidatePath("/", "layout"); return { ok: true as const }
 
 // ---- Mandates ---------------------------------------------------------------------------------
 
-export async function compileMandateAction(text: string): Promise<R<{ rules: MandateRules; warnings: string[] }>> {
+export async function compileMandateAction(text: string): Promise<R<{ rules: MandateRules; warnings: string[]; questions: MandateQuestion[] }>> {
   try {
     await currentUserId();
     if (text.trim().length < 8) throw new Error("Describe what the agent may buy and how much it may spend.");
-    const rules = await compileMandate(text.slice(0, 2000));
-    const warnings: string[] = [];
+    const draft = await draftMandate(text.slice(0, 2000));
+    // The model's draft is checked against the user's own words in code before the user ever sees it.
+    const review = reviewDraft(text, draft.rules);
+    const rules = review.rules, warnings = [...review.changes];
     if (rules.merchantPolicy === "allowlist") {
       const r = await resolveMerchantNames(rules.allowedMerchants);
       rules.allowedMerchants = r.resolved;
       for (const u of r.unknown) warnings.push(`"${u}" is not a merchant this gateway knows, so purchases there will be blocked.`);
     }
     if (rules.blockedMerchants.length) rules.blockedMerchants = (await resolveMerchantNames(rules.blockedMerchants)).resolved;
-    return { ok: true, rules, warnings };
+    const asked = new Set(review.questions.map((q) => q.id));
+    // The model's own questions are advisory: the user may answer them or keep the narrower reading it chose.
+    const fromModel = draft.questions.filter((q) => !(asked.has("amount") && /how much|budget|spend/i.test(q.question)) && !(asked.has("currency") && /currenc/i.test(q.question)) && !(asked.has("category") && /what .*buy|categor|product/i.test(q.question)))
+      .map((q, i) => ({ id: `model-${i}`, question: q.question.slice(0, 300), hint: q.hint.slice(0, 200), required: false }));
+    return { ok: true, rules, warnings, questions: [...review.questions, ...fromModel] };
   } catch (e) { return fail(e); }
 }
 export async function confirmMandateAction(text: string, rules: MandateRules, opts: { name?: string; agentIds?: string[] | null; replaceId?: string } = {}): Promise<R> {
   try {
     const parsed = MandateRulesSchema.parse(rules);
     if (!(new Date(parsed.expiresAt) > new Date())) throw new Error("The expiry must be in the future.");
-    await confirmMandate(await currentUserId(), text.slice(0, 2000), parsed, opts);
+    // Checked again here, so rules sent by a modified page cannot skip the review.
+    const review = reviewDraft(text, parsed);
+    const open = review.questions.filter((q) => q.required);
+    if (open.length) throw new Error(`Answer this first: ${open[0].question}`);
+    await confirmMandate(await currentUserId(), text.slice(0, 2000), review.rules, opts);
     return done();
   } catch (e) { return fail(e); }
 }

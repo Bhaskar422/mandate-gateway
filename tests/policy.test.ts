@@ -90,3 +90,11 @@ describe("page integrity", () => {
   it("still blocks on limits when the page is suspicious", () =>
     expect(evaluate(base({ pageSignals: signals, spend: { committedCents: 14000, purchaseCount: 1 } })).outcome).toBe("block"));
 });
+
+describe("never-buy across mandates", () => {
+  it("blocks a store another mandate says never to buy from, even when this mandate allows it", () => {
+    const d = evaluate(base({ neverBuy: ["Stride"] }));
+    expect(d.outcome).toBe("block"); expect(d.reason).toMatch(/holds for every mandate/);
+  });
+  it("leaves other stores alone", () => expect(evaluate(base({ neverBuy: ["Kickz Outlet"] })).outcome).toBe("approve"));
+});
