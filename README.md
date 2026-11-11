@@ -1,10 +1,13 @@
 # Mandate
 
-**The trust layer for agent payments on PayPal.** PayPal made agents able to pay. This makes it safe to let them.
+**Proof for every agent purchase on PayPal.** Agents buy inside rules the buyer set. Every step is signed, so the buyer gets a refund on the record and the store wins a dispute with it.
 
 Live demo: https://mandate-gateway.vercel.app (PayPal sandbox)
 
-A gateway sits between any AI shopping agent and the user's PayPal account. The agent never holds payment credentials. It asks the gateway to pay, and the gateway decides.
+A gateway sits between any AI shopping agent and the user's PayPal account. The agent never holds payment credentials. It asks the gateway to pay, and the gateway decides. Stopping a bad purchase is half of it. The other half starts after the money moves, and it serves both sides:
+
+- **The buyer** sets the rules, sees why each purchase was paid, held or blocked, and gets refunds settled on a record they can verify.
+- **The store** joins by itself, receives a signed record of every order, and answers refund requests and PayPal disputes with that record.
 
 - **Authorise.** The user writes a mandate in plain English: "up to $150 on running shoes, known merchants only, ask me above $100". A model compiles it to rules, the user confirms them, and from then on plain code enforces them.
 - **Buy.** Agents connect over MCP. Each purchase is checked against the mandate, then paid from the user's vaulted PayPal wallet, sent to the user for one-tap approval, or blocked with a reason.
@@ -50,6 +53,8 @@ A prompt injection can change what an agent asks for. It cannot raise a limit, c
 - **Checked mandates.** The rules a model drafts from the user's words are checked against those words in code before the user sees them: a store rule or a gift-card category the user never wrote is removed, limits above the budget are lowered, and a missing budget, mixed currencies or a missing product category become questions the user must answer. The check runs again at confirmation. "Never buy from X" in any one mandate holds for all of them.
 - **Charge on shipment.** A user can choose to be charged only when the store ships. PayPal reserves the money at purchase (an authorization), the gateway captures it when the store reports the shipment, and until then the buyer can cancel and the store releases the reservation.
 - **Checked against PayPal.** Any purchase can be compared, fact by fact, with PayPal's own record of the order: amount, payee, capture or reservation state, refunds.
+- **Guided mandates.** A mandate can be built from a few choices (budget, what, which stores, when to ask) instead of written. Before confirming, the user sees made-up purchases run through the real policy engine: what would be paid, what would ask first, what would be blocked.
+- **Demo wallet.** The operator can lend one sandbox buyer to visitors who have no PayPal sandbox account. It is shared, so mandates that spend from it are capped at $200 and all demo spending is capped per day.
 - **Built-in shopping assistant.** A chat in the dashboard that shops at the demo stores, for trying the gateway with no setup. It is an ordinary agent: it has its own entry on the Agents page, can be paused or revoked, and buys only through the same functions the MCP server and REST API call. It runs on the gateway's model key, so each user gets a daily message allowance.
 - **Sign-in by PayPal.** There is no separate password. The PayPal account a user links is their identity: linking the same account from another browser signs that browser in to the same dashboard.
 - **Settlement rules.** The user decides what their agent may accept without asking: partial refunds at or above a chosen share of the price, and replacements.
@@ -119,7 +124,8 @@ For one purchase the record holds the mandate text and rules hash, the user's re
 **In the hosted demo**
 
 1. Open https://mandate-gateway.vercel.app and click **Link PayPal**. Log in with a US PayPal sandbox personal account.
-2. Write a mandate, click **Turn into rules**, check them and **Confirm mandate**.
+   With no PayPal sandbox account, choose **Use the demo wallet** instead, when the operator has set one up.
+2. Build a mandate from the choices on the Mandates page, or write one in your own words, and confirm the rules.
 3. Open **Assistant** and ask it to buy running shoes. That is the quickest way to see a purchase paid, held for approval or blocked.
 4. To use your own agent instead, click **Connect an agent**. The key screen has ready-made setup for ChatGPT, Claude Code, Claude Desktop, Codex CLI, Cursor, Gemini CLI, VS Code, any other MCP client, and plain REST. It adds the gateway and the demo stores' catalogues.
 

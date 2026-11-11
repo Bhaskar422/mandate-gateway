@@ -1,7 +1,8 @@
 "use client";
-import { ArrowRight, Bot, Check, FileSignature, ShieldCheck } from "lucide-react";
+import { ArrowRight, Bot, Check, FileSignature, ScrollText, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 import { useAccount } from "../AccountProvider";
+import DemoWalletButton from "../DemoWalletButton";
 
 /** The three things a new account needs before an agent can buy anything. */
 export function useSetup() {
@@ -9,7 +10,7 @@ export function useSetup() {
   const steps = [
     { key: "paypal", done: !!state.paypal, title: "Link your PayPal account",
       body: "You log in at PayPal once and it saves your wallet for this gateway. Agents never see your PayPal login or any payment details. Your PayPal account is also how you sign in: link the same one on another browser and this account comes back.",
-      done_text: state.paypal ? `Linked${state.paypal.email ? ` as ${state.paypal.email}` : ""}.` : "", cta: "Link PayPal", href: "/api/paypal/link", external: true, alt: null as { label: string; href: string } | null },
+      done_text: state.paypal ? (state.paypal.demo ? "Using the shared demo wallet." : `Linked${state.paypal.email ? ` as ${state.paypal.email}` : ""}.`) : "", cta: "Link PayPal", href: "/api/paypal/link", external: true, alt: null as { label: string; href: string } | null },
     { key: "mandate", done: state.mandates.length > 0, title: "Write a mandate",
       body: "Say in plain English what an agent may buy and how much it may spend. You review the exact rules before they take effect.",
       done_text: `${state.mandates.length} active.`, cta: "Write a mandate", href: "/mandates?new=1", external: false, alt: null },
@@ -22,6 +23,7 @@ export function useSetup() {
 
 function Steps() {
   const { steps } = useSetup();
+  const demo = useAccount().state.demoWallet.available;
   const next = steps.find((s) => !s.done)?.key;
   return (
     <ol className="space-y-3">
@@ -33,12 +35,14 @@ function Steps() {
           <div className="min-w-0 flex-1">
             <h3 className="text-lg font-semibold text-ink">{s.title}</h3>
             <p className="mt-0.5 text-base text-ink-2">{s.done ? s.done_text : s.body}</p>
+            {s.key === "paypal" && !s.done && demo && <p className="mt-1.5 text-sm text-ink-3">No PayPal sandbox account? The demo wallet is a shared sandbox buyer you can use straight away. Purchases are real sandbox payments, with a smaller budget.</p>}
             {!s.done && (
               <div className="mt-3 flex flex-wrap gap-2">
                 {s.external
                   ? <a href={s.href} className={`btn ${s.key === next ? "btn-primary" : "btn-secondary"}`}>{s.cta}<ArrowRight size={15} aria-hidden /></a>
                   : <Link href={s.href} className={`btn ${s.key === next ? "btn-primary" : "btn-secondary"}`}>{s.cta}<ArrowRight size={15} aria-hidden /></Link>}
                 {s.alt && <Link href={s.alt.href} className="btn btn-secondary">{s.alt.label}</Link>}
+                {s.key === "paypal" && <DemoWalletButton />}
               </div>
             )}
           </div>
@@ -54,14 +58,15 @@ export function Welcome() {
     { icon: <FileSignature size={18} aria-hidden />, title: "You set the rules", body: "“Up to $150 on running shoes, known stores only, ask me above $100.”" },
     { icon: <Bot size={18} aria-hidden />, title: "Your agent asks to buy", body: "It sends the gateway a product page. It never holds a card or your PayPal login." },
     { icon: <ShieldCheck size={18} aria-hidden />, title: "The gateway decides", body: "It reads the store's page itself, then pays, asks you first, or blocks it and says why." },
+    { icon: <ScrollText size={18} aria-hidden />, title: "Every step is signed", body: "The record settles what happens next: a refund for you, or evidence the store can take to PayPal." },
   ];
   return (
     <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)] lg:gap-12">
       <div>
         <p className="eyebrow">Welcome</p>
-        <h1 className="display mt-2 text-3xl text-ink sm:text-[2.6rem] sm:leading-[1.1]">Let AI agents shop for you. <em className="text-brand-ink">Keep the final say.</em></h1>
+        <h1 className="display mt-2 text-3xl text-ink sm:text-[2.6rem] sm:leading-[1.1]">Every agent purchase comes with proof. <em className="text-brand-ink">You keep the final say.</em></h1>
         <p className="mt-4 max-w-xl text-lg text-ink-2">
-          Mandate sits between any AI shopping agent and your PayPal account. Agents can only ask. The gateway checks every request against rules you wrote, and signs a record of every step so a refund or dispute is settled on facts.
+          Mandate sits between any AI shopping agent and your PayPal account. Agents can only ask. The gateway checks every request against rules you set and signs a record of every step. If something goes wrong, you get your refund on that record, and the store answers a dispute with it.
         </p>
         <ol className="mt-7 space-y-4">
           {how.map((h, i) => (

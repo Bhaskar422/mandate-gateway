@@ -17,7 +17,7 @@ export async function GET() {
     if (!link?.setupTokenId) throw new Error("No PayPal link in progress");
     // Use the setup token we stored for this user, not one from the URL.
     const t = await createPaymentToken(link.setupTokenId);
-    const wallet = { vaultId: t.vaultId, customerId: t.customerId, payerId: t.payerId, payerEmail: t.payerEmail, status: "active" as const, setupTokenId: null };
+    const wallet = { vaultId: t.vaultId, customerId: t.customerId, payerId: t.payerId, payerEmail: t.payerEmail, status: "active" as const, setupTokenId: null, isDemo: false };
 
     // The PayPal account is the identity. If it already has a Mandate account, this browser is signed in to that
     // account instead of starting a second one. (Simulated PayPal gives everyone the same buyer, so it is skipped.)

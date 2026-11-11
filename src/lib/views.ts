@@ -1,6 +1,7 @@
 // Read models for the web app. Pages and client components take their data from here and nowhere else.
 import { desc, eq } from "drizzle-orm";
 import { assistantDailyLimit, assistantRemaining } from "./assistant";
+import { DEMO_MANDATE_CAP_CENTS, demoWalletAvailable } from "./demo-wallet";
 import { appUrl, llmConfigured, paypalSimulated } from "./config";
 import { db, schema } from "./db";
 import { committedSpend, ensureSeed, getUser } from "./gateway";
@@ -11,7 +12,7 @@ const iso = (d: Date | null | undefined) => d?.toISOString() ?? null;
 
 export async function dashboardState(userId: string) {
   await ensureSeed();
-  const [user, [link], mandateRows, agentRows, merchantRows, rows, caseRows, merchantList, assistantLeft] = await Promise.all([
+  const [user, [link], mandateRows, agentRows, merchantRows, rows, caseRows, merchantList, assistantLeft, demoAvailable] = await Promise.all([
     getUser(userId),
     db.select().from(schema.paypalLinks).where(eq(schema.paypalLinks.userId, userId)),
     db.select().from(schema.mandates).where(eq(schema.mandates.userId, userId)).orderBy(desc(schema.mandates.confirmedAt)),
@@ -21,6 +22,7 @@ export async function dashboardState(userId: string) {
     db.select().from(schema.cases).where(eq(schema.cases.userId, userId)).orderBy(desc(schema.cases.createdAt)),
     listMerchants(userId),
     assistantRemaining(userId),
+    demoWalletAvailable(),
   ]);
   const agentName = (id: string | null) => agentRows.find((a) => a.id === id)?.name ?? null;
   const merchantName = (id: string | null) => merchantRows.find((m) => m.id === id)?.name ?? null;
@@ -83,7 +85,8 @@ export async function dashboardState(userId: string) {
     appUrl: appUrl(), simulated: paypalSimulated(), llm: llmConfigured(),
     assistant: { remaining: assistantLeft, dailyLimit: assistantDailyLimit() },
     account: { frozen: !!user?.frozenAt, frozenAt: iso(user?.frozenAt), settings: { autoAcceptRefundPercent: user?.settings?.autoAcceptRefundPercent ?? 100, autoAcceptReplacement: !!user?.settings?.autoAcceptReplacement, notifyUrl: user?.settings?.notifyUrl ?? null, chargeOnShipment: !!user?.settings?.chargeOnShipment } },
-    paypal: link?.status === "active" ? { email: link.payerEmail } : null,
+    paypal: link?.status === "active" ? { email: link.isDemo ? "Demo wallet" : link.payerEmail, demo: link.isDemo } : null,
+    demoWallet: { available: demoAvailable, mandateCapCents: DEMO_MANDATE_CAP_CENTS },
     mandates,
     /** The newest active mandate, for components that show one. */
     mandate: mandates[0] ?? null,

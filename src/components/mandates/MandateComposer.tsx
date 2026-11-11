@@ -3,12 +3,14 @@ import { ArrowLeft, PenLine, Sparkles, TriangleAlert, X } from "lucide-react";
 import { useState } from "react";
 import { compileMandateAction, confirmMandateAction } from "@/app/actions";
 import type { MandateQuestion } from "@/lib/mandate-check";
+import type { MandateExample } from "@/lib/mandate-examples";
 import type { MandateRules } from "@/lib/rules";
 import type { MandateView } from "@/lib/views";
 import { useAccount } from "../AccountProvider";
 import Banner, { ErrorText } from "../ui/Banner";
 import Button from "../ui/Button";
 import { useAction } from "../useAction";
+import MandateBuilder from "./MandateBuilder";
 import RulesList from "./RulesList";
 
 const EXAMPLES = [
@@ -25,14 +27,16 @@ export default function MandateComposer({ replace, onClose, onConfirmed }: { rep
   const { state } = useAccount();
   const compile = useAction(compileMandateAction), confirm = useAction(confirmMandateAction);
   const [text, setText] = useState(replace?.sourceText ?? "");
-  const [draft, setDraft] = useState<{ rules: MandateRules; warnings: string[]; questions: MandateQuestion[] } | null>(null);
+  const [draft, setDraft] = useState<{ rules: MandateRules; warnings: string[]; questions: MandateQuestion[]; examples: MandateExample[] } | null>(null);
+  // A new mandate starts in the guided builder; replacing one starts from its own words.
+  const [mode, setMode] = useState<"build" | "write">(replace ? "write" : "build");
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [name, setName] = useState(replace?.name ?? "");
   const [scoped, setScoped] = useState(!!replace?.agentIds?.length);
   const [agentIds, setAgentIds] = useState<string[]>(replace?.agentIds ?? []);
   const agents = state.agents.filter((a) => a.status !== "revoked");
 
-  const toRules = async (e: React.FormEvent) => { e.preventDefault(); const r = await compile.run(text); if (r) { setDraft({ rules: r.rules, warnings: r.warnings, questions: r.questions }); setAnswers({}); } };
+  const toRules = async (e: React.FormEvent) => { e.preventDefault(); const r = await compile.run(text); if (r) { setDraft({ rules: r.rules, warnings: r.warnings, questions: r.questions, examples: r.examples }); setAnswers({}); } };
   // Answers become part of the mandate's own words, so the signed record shows exactly what the user said.
   const answer = async () => {
     const extra = (draft?.questions ?? []).map((q) => answers[q.id]?.trim()).filter(Boolean).join(" ");
@@ -40,7 +44,7 @@ export default function MandateComposer({ replace, onClose, onConfirmed }: { rep
     const next = `${text.trim()} ${extra}`.slice(0, 2000);
     setText(next);
     const r = await compile.run(next);
-    if (r) { setDraft({ rules: r.rules, warnings: r.warnings, questions: r.questions }); setAnswers({}); }
+    if (r) { setDraft({ rules: r.rules, warnings: r.warnings, questions: r.questions, examples: r.examples }); setAnswers({}); }
   };
   const mustAnswer = (draft?.questions ?? []).some((q) => q.required);
   const save = async () => {
@@ -63,16 +67,36 @@ export default function MandateComposer({ replace, onClose, onConfirmed }: { rep
       {!draft ? (
         <form onSubmit={toRules}>
           {!state.llm && <Banner tone="warn" className="mb-4" icon={<TriangleAlert size={17} aria-hidden />} title="No model is configured on this gateway">Turning text into rules needs one, so this step may fail.</Banner>}
-          <label htmlFor="mandate-text" className="field-label">Say it in your own words</label>
-          <textarea id="mandate-text" className="field quote !leading-7" rows={4} value={text} onChange={(e) => setText(e.target.value)} maxLength={2000} disabled={compile.pending} autoFocus
-            placeholder="Up to $150 on running shoes from verified stores. Ask me before anything over $100." />
-          <p className="field-hint">Mention a total budget and what may be bought. You can also give a per-purchase or daily limit, an amount above which to ask you, which stores, and when it ends. With no end date it lasts 7 days.</p>
-          <div className="mt-3">
-            <p className="eyebrow mb-1.5">Or start from an example</p>
-            <div className="flex flex-col gap-1.5">
-              {EXAMPLES.map((x) => <button key={x} type="button" disabled={compile.pending} onClick={() => setText(x)} className="rounded-lg border border-line bg-raised px-3 py-2 text-left text-sm text-ink-2 transition-colors hover:border-line-strong hover:text-ink">{x}</button>)}
-            </div>
+          <div role="tablist" aria-label="How to write the mandate" className="mb-5 inline-flex rounded-lg border border-line bg-raised p-1">
+            {([["build", "Pick from choices"], ["write", "Write it myself"]] as const).map(([id, label]) => (
+              <button key={id} type="button" role="tab" aria-selected={mode === id} disabled={compile.pending} onClick={() => setMode(id)}
+                className={`rounded-md px-3 py-1.5 text-sm font-semibold ${mode === id ? "bg-surface text-ink shadow-sm" : "text-ink-3 hover:text-ink"}`}>{label}</button>
+            ))}
           </div>
+          {mode === "build" ? (
+            <div>
+              <p className="mb-5 max-w-2xl text-base text-ink-2">A mandate is a spending allowance with rules. Your agent can buy inside it without asking; anything outside it is blocked or comes to you first.</p>
+              <MandateBuilder onChange={setText} disabled={compile.pending} />
+              <figure className="mt-6 rounded-[10px] border border-line bg-raised p-4">
+                <figcaption className="eyebrow">Your mandate, in words</figcaption>
+                <blockquote className="quote mt-1 italic [overflow-wrap:anywhere]">“{text}”</blockquote>
+                <button type="button" className="link mt-2 text-sm" onClick={() => setMode("write")}>Edit the wording</button>
+              </figure>
+            </div>
+          ) : (
+            <div>
+          <label htmlFor="mandate-text" className="field-label">Say it in your own words</label>
+            <textarea id="mandate-text" className="field quote !leading-7" rows={4} value={text} onChange={(e) => setText(e.target.value)} maxLength={2000} disabled={compile.pending} autoFocus
+              placeholder="Up to $150 on running shoes from verified stores. Ask me before anything over $100." />
+            <p className="field-hint">Mention a total budget and what may be bought. You can also give a per-purchase or daily limit, an amount above which to ask you, which stores, and when it ends. With no end date it lasts 7 days.</p>
+            <div className="mt-3">
+              <p className="eyebrow mb-1.5">Or start from an example</p>
+              <div className="flex flex-col gap-1.5">
+                {EXAMPLES.map((x) => <button key={x} type="button" disabled={compile.pending} onClick={() => setText(x)} className="rounded-lg border border-line bg-raised px-3 py-2 text-left text-sm text-ink-2 transition-colors hover:border-line-strong hover:text-ink">{x}</button>)}
+              </div>
+            </div>
+            </div>
+          )}
           <div className="mt-5 flex flex-wrap items-center gap-3">
             <Button type="submit" variant="primary" icon={<Sparkles size={15} aria-hidden />} loading={compile.pending} loadingText="Reading your mandate" disabled={text.trim().length < 8}>Turn into rules</Button>
             {compile.pending && <span className="text-sm text-ink-3" role="status">A model is turning your words into exact rules. This takes a few seconds.</span>}
@@ -107,6 +131,23 @@ export default function MandateComposer({ replace, onClose, onConfirmed }: { rep
           )}
           {draft.warnings.map((w) => <Banner key={w} tone="warn" className="mt-3" icon={<TriangleAlert size={17} aria-hidden />}>{w}</Banner>)}
           <div className="mt-3"><RulesList rules={draft.rules} /></div>
+          {draft.examples.length > 0 && (
+            <div className="mt-5">
+              <p className="eyebrow">What this means in practice</p>
+              <ul className="mt-2 divide-y divide-line rounded-[10px] border border-line">
+                {draft.examples.map((x) => {
+                  const o = x.outcome === "approve" ? { label: "Paid without asking", tone: "ok" } : x.outcome === "needs_approval" ? { label: "Asks you first", tone: "warn" } : { label: "Blocked", tone: "bad" };
+                  return (
+                    <li key={x.purchase} className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 px-3.5 py-2.5">
+                      <span className="min-w-0 text-base text-ink [overflow-wrap:anywhere]">If your agent tries to buy {x.purchase}</span>
+                      <span className={`tone-${o.tone} tone-softbg tone-text shrink-0 rounded-full px-2.5 py-0.5 text-xs font-bold`}>{o.label}</span>
+                    </li>
+                  );
+                })}
+              </ul>
+              <p className="mt-1.5 text-sm text-ink-3">These are made-up purchases run through the same checks the gateway uses on real ones.</p>
+            </div>
+          )}
           <p className="mt-2 text-sm text-ink-3">If a rule is not what you meant, change your wording and try again. These exact rules, not the sentence, are what gets enforced.</p>
 
           <div className="mt-5 grid gap-5 border-t border-line pt-5 sm:grid-cols-2">

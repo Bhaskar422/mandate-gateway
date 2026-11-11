@@ -33,6 +33,8 @@ export const paypalLinks = pgTable("paypal_links", {
   /** PayPal's id for the buyer's account. It identifies the user: linking the same PayPal account again restores this account. */
   payerId: text("payer_id"),
   payerEmail: text("payer_email"),
+  /** True when this is the gateway's shared demo wallet, lent to a visitor who has no PayPal sandbox account. */
+  isDemo: boolean("is_demo").notNull().default(false),
   status: text("status").$type<"pending" | "active">().notNull().default("pending"),
   createdAt: ts("created_at").notNull().defaultNow(),
 });
@@ -203,3 +205,10 @@ export const assistantUsage = pgTable("assistant_usage", {
   day: text("day").notNull(),
   count: integer("count").notNull().default(0),
 }, (t) => [primaryKey({ columns: [t.userId, t.day] })]);
+
+/** Deployment-wide settings the operator controls, such as which wallet is lent out as the demo wallet. */
+export const gatewaySettings = pgTable("gateway_settings", {
+  key: text("key").primaryKey(),
+  value: jsonb("value").$type<Record<string, unknown>>().notNull(),
+  updatedAt: ts("updated_at").notNull().defaultNow(),
+});

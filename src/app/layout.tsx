@@ -8,7 +8,7 @@ const display = Newsreader({ variable: "--font-display", subsets: ["latin"], sty
 
 export const metadata: Metadata = {
   title: { default: "Mandate", template: "%s · Mandate" },
-  description: "Let AI agents shop with your PayPal account, inside rules you set. Every purchase is checked, and every step is signed.",
+  description: "Proof for every agent purchase on PayPal. Agents buy inside rules the buyer set, and a signed record of every step settles refunds and disputes for the buyer and the store.",
 };
 export const viewport: Viewport = { width: "device-width", initialScale: 1, themeColor: [{ media: "(prefers-color-scheme: light)", color: "#f5f3ee" }, { media: "(prefers-color-scheme: dark)", color: "#121311" }] };
 

@@ -7,8 +7,10 @@ import { restartAssistant } from "@/lib/assistant";
 import type { UserSettings } from "@/lib/db/schema";
 import { answerOffer, cancelHold, confirmMandate, createAgent, decideApproval, decideByToken, pauseAgent, reportProblem, resolveMerchantNames, resumeAgent, revokeAgent, revokeMandate, rotateAgentKey, setFrozen, updateSettings } from "@/lib/gateway";
 import { publicKeyPem, verifyBundle, type LedgerRow } from "@/lib/ledger";
+import { clearDemoWallet, DEMO_MANDATE_CAP_CENTS, isDemoUser, setDemoWalletFromUser, useDemoWallet as takeDemoWallet } from "@/lib/demo-wallet";
 import { draftMandate } from "@/lib/llm";
 import { reviewDraft, type MandateQuestion } from "@/lib/mandate-check";
+import { mandateExamples, type MandateExample } from "@/lib/mandate-examples";
 import { registerMerchant, removeMerchant, setMerchantVerified, verifyMerchantDomain } from "@/lib/merchants";
 import { reconcilePurchase, type ReconcileRow } from "@/lib/reconcile";
 import { operatorSignIn, operatorSignOut, requireOperator } from "@/lib/operator";
@@ -21,16 +23,27 @@ type R<T = object> = ({ ok: true } & T) | { ok: false; error: string };
 const fail = (e: unknown) => ({ ok: false as const, error: e instanceof Error ? e.message : String(e) });
 const done = () => { revalidatePath("/", "layout"); return { ok: true as const }; };
 
+/** The demo wallet is shared, so a mandate that spends from it is held to a smaller budget. Returns what it changed. */
+function capForDemo(rules: MandateRules): string[] {
+  if (rules.totalLimitCents <= DEMO_MANDATE_CAP_CENTS) return [];
+  const was = rules.totalLimitCents;
+  rules.totalLimitCents = DEMO_MANDATE_CAP_CENTS;
+  for (const k of ["perPurchaseLimitCents", "dailyLimitCents", "perMerchantLimitCents"] as const) if (rules[k] != null && rules[k]! > DEMO_MANDATE_CAP_CENTS) rules[k] = DEMO_MANDATE_CAP_CENTS;
+  if (rules.approvalThresholdCents != null && rules.approvalThresholdCents >= DEMO_MANDATE_CAP_CENTS) rules.approvalThresholdCents = null;
+  return [`You are using the shared demo wallet, so the budget was lowered from $${(was / 100).toFixed(0)} to $${(DEMO_MANDATE_CAP_CENTS / 100).toFixed(0)}. Link your own PayPal sandbox account to lift this.`];
+}
+
 // ---- Mandates ---------------------------------------------------------------------------------
 
-export async function compileMandateAction(text: string): Promise<R<{ rules: MandateRules; warnings: string[]; questions: MandateQuestion[] }>> {
+export async function compileMandateAction(text: string): Promise<R<{ rules: MandateRules; warnings: string[]; questions: MandateQuestion[]; examples: MandateExample[] }>> {
   try {
-    await currentUserId();
+    const userId = await currentUserId();
     if (text.trim().length < 8) throw new Error("Describe what the agent may buy and how much it may spend.");
     const draft = await draftMandate(text.slice(0, 2000));
     // The model's draft is checked against the user's own words in code before the user ever sees it.
     const review = reviewDraft(text, draft.rules);
     const rules = review.rules, warnings = [...review.changes];
+    if (await isDemoUser(userId)) for (const w of capForDemo(rules)) warnings.push(w);
     if (rules.merchantPolicy === "allowlist") {
       const r = await resolveMerchantNames(rules.allowedMerchants);
       rules.allowedMerchants = r.resolved;
@@ -41,7 +54,7 @@ export async function compileMandateAction(text: string): Promise<R<{ rules: Man
     // The model's own questions are advisory: the user may answer them or keep the narrower reading it chose.
     const fromModel = draft.questions.filter((q) => !(asked.has("amount") && /how much|budget|spend/i.test(q.question)) && !(asked.has("currency") && /currenc/i.test(q.question)) && !(asked.has("category") && /what .*buy|categor|product/i.test(q.question)))
       .map((q, i) => ({ id: `model-${i}`, question: q.question.slice(0, 300), hint: q.hint.slice(0, 200), required: false }));
-    return { ok: true, rules, warnings, questions: [...review.questions, ...fromModel] };
+    return { ok: true, rules, warnings, questions: [...review.questions, ...fromModel], examples: mandateExamples(rules) };
   } catch (e) { return fail(e); }
 }
 export async function confirmMandateAction(text: string, rules: MandateRules, opts: { name?: string; agentIds?: string[] | null; replaceId?: string } = {}): Promise<R> {
@@ -52,7 +65,9 @@ export async function confirmMandateAction(text: string, rules: MandateRules, op
     const review = reviewDraft(text, parsed);
     const open = review.questions.filter((q) => q.required);
     if (open.length) throw new Error(`Answer this first: ${open[0].question}`);
-    await confirmMandate(await currentUserId(), text.slice(0, 2000), review.rules, opts);
+    const userId = await currentUserId();
+    if (await isDemoUser(userId)) capForDemo(review.rules);
+    await confirmMandate(userId, text.slice(0, 2000), review.rules, opts);
     return done();
   } catch (e) { return fail(e); }
 }
@@ -73,6 +88,8 @@ export async function revokeAgentAction(agentId: string): Promise<R> { try { awa
 export async function rotateAgentKeyAction(agentId: string): Promise<R<{ key: string }>> {
   try { const key = await rotateAgentKey(await currentUserId(), agentId); revalidatePath("/", "layout"); return { ok: true, key }; } catch (e) { return fail(e); }
 }
+/** Use the gateway's shared demo wallet instead of linking a PayPal account. */
+export async function useDemoWalletAction(): Promise<R> { try { await takeDemoWallet(await currentUserId()); return done(); } catch (e) { return fail(e); } }
 /** The kill switch. */
 export async function setFrozenAction(frozen: boolean): Promise<R> { try { await setFrozen(await currentUserId(), frozen); return done(); } catch (e) { return fail(e); } }
 export async function updateSettingsAction(patch: UserSettings): Promise<R> { try { await updateSettings(await currentUserId(), patch); return done(); } catch (e) { return fail(e); } }
@@ -136,6 +153,10 @@ export async function reviewMerchantAction(merchantId: string, verified: boolean
 export async function removeMerchantAction(merchantId: string): Promise<R> {
   try { await requireOperator(); await removeMerchant(merchantId); return done(); } catch (e) { return fail(e); }
 }
+
+/** Lend out, as the demo wallet, the PayPal wallet linked in the operator's own browser. */
+export async function setDemoWalletAction(): Promise<R> { try { await requireOperator(); await setDemoWalletFromUser(await currentUserId()); return done(); } catch (e) { return fail(e instanceof Error && e.message === "No session" ? new Error("Open the dashboard in this browser and link a sandbox buyer first.") : e); } }
+export async function clearDemoWalletAction(): Promise<R> { try { await requireOperator(); await clearDemoWallet(); return done(); } catch (e) { return fail(e); } }
 
 // ---- Evidence ---------------------------------------------------------------------------------
 

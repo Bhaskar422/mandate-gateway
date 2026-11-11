@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { restartAssistantAction } from "@/app/actions";
 import type { AssistantEvent } from "@/lib/assistant";
 import { useAccount } from "../AccountProvider";
+import DemoWalletButton from "../DemoWalletButton";
 import Banner from "../ui/Banner";
 import Button from "../ui/Button";
 import { PageHeader } from "../ui/Layout";
@@ -112,7 +113,7 @@ export default function Chat() {
         actions={msgs.length > 0 && <Button size="sm" icon={<RotateCcw size={13} aria-hidden />} disabled={busy} onClick={() => setMsgs([])}>New chat</Button>} />
 
       <div className="mb-4 space-y-3 empty:hidden">
-        {!state.paypal && <Banner tone="warn" icon={<CircleAlert size={17} aria-hidden />} title="PayPal is not linked" action={<a href="/api/paypal/link" className="btn btn-primary btn-sm">Link PayPal</a>}>The assistant can look around, but every purchase is blocked until a wallet is linked.</Banner>}
+        {!state.paypal && <Banner tone="warn" icon={<CircleAlert size={17} aria-hidden />} title="PayPal is not linked" action={<span className="flex flex-wrap gap-2"><a href="/api/paypal/link" className="btn btn-primary btn-sm">Link PayPal</a><DemoWalletButton size="sm" /></span>}>The assistant can look around, but every purchase is blocked until a wallet is linked.</Banner>}
         {state.paypal && state.mandates.length === 0 && <Banner tone="warn" icon={<CircleAlert size={17} aria-hidden />} title="No mandate is active" action={<Link href="/mandates?new=1" className="btn btn-primary btn-sm">Write a mandate</Link>}>Without a mandate the gateway blocks everything the assistant asks for.</Banner>}
         {paused && <Banner tone="warn" icon={<CircleAlert size={17} aria-hidden />} title="The assistant is paused" action={<Link href="/agents" className="btn btn-secondary btn-sm">Agents</Link>}>It can still talk, but the gateway blocks its purchases until you resume it.</Banner>}
         {revoked && <Banner tone="neutral" title="You revoked the assistant" action={<Button size="sm" variant="primary" loading={restart.pending} onClick={() => restart.run()}>Start a new one</Button>}>A new assistant appears on the Agents page as a new agent.</Banner>}

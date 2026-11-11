@@ -2,7 +2,7 @@
 import { BadgeCheck, ExternalLink, LogOut, ShieldCheck, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { operatorSignInAction, operatorSignOutAction, removeMerchantAction, reviewMerchantAction } from "@/app/actions";
+import { clearDemoWalletAction, operatorSignInAction, operatorSignOutAction, removeMerchantAction, reviewMerchantAction, setDemoWalletAction } from "@/app/actions";
 import type { MerchantView } from "@/lib/views";
 import LocalTime from "../LocalTime";
 import { TRUST } from "../merchants/trust";
@@ -41,7 +41,25 @@ function Row({ m, onChange }: { m: MerchantView; onChange: () => void }) {
 }
 
 /** The operator's review queue: grant or withdraw verified status, and remove stores that should not be listed. */
-export default function Review({ configured, signedIn, merchants }: { configured: boolean; signedIn: boolean; merchants: MerchantView[] }) {
+function DemoWallet({ setAt, onChange }: { setAt: string | null; onChange: () => void }) {
+  const set = useAction(setDemoWalletAction), clear = useAction(clearDemoWalletAction);
+  return (
+    <section aria-label="Demo wallet" className="card mt-8 p-5 sm:p-6">
+      <h2 className="text-lg font-semibold text-ink">Demo wallet</h2>
+      <p className="mt-1 max-w-2xl text-base text-ink-2">
+        Visitors without a PayPal sandbox account can borrow one sandbox buyer to try a real sandbox purchase. Everyone who uses it spends from the same sandbox balance, so each mandate is capped and there is a daily total. It is never used to sign anyone in.
+      </p>
+      <p className="mt-3 text-base text-ink">{setAt ? <>A demo wallet is set (since <LocalTime iso={setAt} format="date" />). The dashboard offers it to visitors with no wallet.</> : "No demo wallet is set, so visitors must link their own PayPal sandbox account."}</p>
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <Button variant={setAt ? "secondary" : "primary"} loading={set.pending} onClick={async () => { if (await set.run()) onChange(); }}>{setAt ? "Replace with the wallet linked in this browser" : "Use the wallet linked in this browser"}</Button>
+        {setAt && <ConfirmButton question="Stop offering the demo wallet? Accounts already using it keep working." confirmLabel="Stop" loading={clear.pending} onConfirm={async () => { if (await clear.run()) onChange(); }}>Stop offering it</ConfirmButton>}
+      </div>
+      <ErrorText>{set.error ?? clear.error}</ErrorText>
+    </section>
+  );
+}
+
+export default function Review({ configured, signedIn, merchants, demoWalletSetAt }: { configured: boolean; signedIn: boolean; merchants: MerchantView[]; demoWalletSetAt: string | null }) {
   const router = useRouter();
   const signIn = useAction(operatorSignInAction), signOut = useAction(operatorSignOutAction);
   const [key, setKey] = useState("");
@@ -75,6 +93,7 @@ export default function Review({ configured, signedIn, merchants }: { configured
         <Button icon={<LogOut size={14} aria-hidden />} loading={signOut.pending} onClick={async () => { if (await signOut.run()) router.refresh(); }}>Sign out</Button>
       </header>
       <ul className="card divide-y divide-line">{rows.map((m) => <Row key={m.id} m={m} onChange={() => router.refresh()} />)}</ul>
+      <DemoWallet setAt={demoWalletSetAt} onChange={() => router.refresh()} />
     </>
   );
 }

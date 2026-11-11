@@ -6,6 +6,7 @@ import { canonical, money, newId, sha256 } from "./ids";
 import { append, evidenceBundle } from "./ledger";
 import { analyseProblem, classifyProduct } from "./llm";
 import { getUser } from "./gateway-user";
+import { DEMO_DAILY_CAP_CENTS, demoSpentToday } from "./demo-wallet";
 import { notify, validNotifyUrl } from "./notify";
 import { PayPalError, payWithVault, holdWithVault, captureHold } from "./paypal";
 import { best, evaluate, type Classification, type Decision } from "./policy";
@@ -306,6 +307,11 @@ export async function pay(purchaseId: string) {
   const [link] = await db.select().from(paypalLinks).where(eq(paypalLinks.userId, p.userId));
   const set = async (v: Partial<typeof purchases.$inferInsert>) => (await db.update(purchases).set({ ...v, updatedAt: new Date() }).where(eq(purchases.id, p.id)).returning())[0];
   try {
+    // The demo wallet is one sandbox buyer shared by every visitor who uses it, so its spending is capped per day.
+    if (link.isDemo && (await demoSpentToday()) + p.amountCents > DEMO_DAILY_CAP_CENTS) {
+      await append({ userId: p.userId, purchaseId: p.id, type: "payment.failed", payload: { reason: "The shared demo wallet has reached its limit for today" } });
+      return set({ status: "payment_failed" });
+    }
     const payee = process.env.PAYPAL_PAYEE_MODE === "platform" ? null : { merchantId: m.paypalMerchantId, email: m.paypalEmail };
     const order = {
       vaultId: link.vaultId!, amountCents: p.amountCents, currency: p.currency, referenceId: p.id, payee,

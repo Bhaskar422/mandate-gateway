@@ -3,6 +3,7 @@ import { BellRing, CircleCheck, LogOut, Wallet } from "lucide-react";
 import { useEffect, useState } from "react";
 import { signOutAction, updateSettingsAction } from "@/app/actions";
 import { useAccount } from "../AccountProvider";
+import DemoWalletButton from "../DemoWalletButton";
 import { money } from "../format";
 import LocalTime from "../LocalTime";
 import { KillSwitch } from "../shell/KillSwitch";
@@ -124,12 +125,12 @@ function SignOut() {
       <div className="max-w-xl">
         <p className="text-lg font-semibold text-ink">Sign out of this browser</p>
         <p className="text-sm text-ink-3">
-          {state.paypal
+          {state.paypal && !state.paypal.demo
             ? "Your account stays as it is. To come back, on this or any browser, link the same PayPal account and you are signed in to it again."
             : "You have not linked PayPal, so nothing identifies this account yet. If you sign out now, this dashboard cannot be recovered."}
         </p>
       </div>
-      <ConfirmButton variant="secondary" question={state.paypal ? "Sign out of this browser?" : "This account cannot be recovered. Sign out anyway?"} confirmLabel="Sign out" loading={pending} icon={<LogOut size={14} aria-hidden />}
+      <ConfirmButton variant="secondary" question={state.paypal && !state.paypal.demo ? "Sign out of this browser?" : "This account cannot be recovered. Sign out anyway?"} confirmLabel="Sign out" loading={pending} icon={<LogOut size={14} aria-hidden />}
         onConfirm={async () => { setPending(true); await signOutAction(); }}>Sign out</ConfirmButton>
     </div>
   );
@@ -152,15 +153,19 @@ export default function Settings() {
             <div className="flex min-w-0 items-start gap-3">
               <span className={`mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-full ${state.paypal ? "bg-ok-soft text-ok-ink" : "bg-warn-soft text-warn-ink"}`}><Wallet size={17} aria-hidden /></span>
               <div className="min-w-0">
-                <p className="text-lg font-semibold text-ink [overflow-wrap:anywhere]">{state.paypal ? `Linked${state.paypal.email ? ` as ${state.paypal.email}` : ""}` : "Not linked"}</p>
+                <p className="text-lg font-semibold text-ink [overflow-wrap:anywhere]">{state.paypal?.demo ? "Using the shared demo wallet" : state.paypal ? `Linked${state.paypal.email ? ` as ${state.paypal.email}` : ""}` : "Not linked"}</p>
                 <p className="max-w-xl text-sm text-ink-3">
                   {state.paypal ? "PayPal holds your saved wallet; the gateway holds a token that only works for this gateway. Agents see neither."
                     : "Until you link PayPal, every purchase is blocked. You log in at PayPal; the gateway never sees your password."}
+                  {state.paypal?.demo && ` The demo wallet is one sandbox buyer shared by everyone who uses it, so a mandate can spend at most $${state.demoWallet.mandateCapCents / 100} and this account is not tied to a PayPal login. Link your own sandbox account to change both.`}
                   {state.simulated && " Payments are simulated on this deployment."}
                 </p>
               </div>
             </div>
-            <a href="/api/paypal/link" className={`btn ${state.paypal ? "btn-secondary" : "btn-primary"}`}>{state.paypal ? "Link a different account" : "Link PayPal"}</a>
+            <div className="flex flex-wrap items-start gap-2">
+              <a href="/api/paypal/link" className={`btn ${state.paypal && !state.paypal.demo ? "btn-secondary" : "btn-primary"}`}>{state.paypal?.demo ? "Link my own PayPal" : state.paypal ? "Link a different account" : "Link PayPal"}</a>
+              <DemoWalletButton />
+            </div>
           </div>
         </Section>
 
