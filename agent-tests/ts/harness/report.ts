@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { RESULTS_DIR, RUNS_DIR } from "./results";
 import { SCENARIOS } from "./scenarios";
 import { ARCHITECTURES, type RunRecord } from "./types";
+import { baselineSection } from "../baseline/section";
 
 const GATEWAY = (process.env.GATEWAY_URL ?? "http://localhost:3100").replace(/\/$/, "");
 const ROOT = fileURLToPath(new URL("../../", import.meta.url));
@@ -82,6 +83,8 @@ if (inj.length) {
     out.push("");
   }
 }
+
+out.push(...baselineSection(all));
 
 out.push("## Spend", "", "| model | runs | model calls | input tokens | output tokens | estimated cost |", "|---|---|---|---|---|---|");
 let total = 0;
