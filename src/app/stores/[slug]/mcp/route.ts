@@ -11,12 +11,21 @@ const view = (s: Store, p: StoreProduct) => ({ sku: p.sku, name: p.name, price: 
 const out = (o: unknown) => ({ content: [{ type: "text" as const, text: JSON.stringify(o, null, 2) }] });
 
 const build = (s: Store) => createMcpHandler((server) => {
-  server.registerTool("search_products", { title: `Search ${s.name}`, description: `Search the ${s.name} catalogue. Returns products with prices and product page URLs.`,
-    inputSchema: z.object({ query: z.string().describe("Search terms; empty returns everything").default("") }) },
-    async ({ query }) => {
+  server.registerTool("search_products", { title: `Search ${s.name}`, description: `Search the ${s.name} catalogue. Returns products with prices and product page URLs. Pass the mandate credential the gateway issued for this store and each product also says whether it fits the buyer's mandate, with the ones that fit listed first.`,
+    inputSchema: z.object({ query: z.string().describe("Search terms; empty returns everything").default(""),
+      credential: z.union([z.string(), z.record(z.string(), z.unknown())]).optional().describe("Optional. The credential from the gateway's get_credential for this store: { payload, signature }") }) },
+    async ({ query, credential }) => {
       const words = query.toLowerCase().split(/\s+/).filter(Boolean);
       const hits = s.products.filter((p) => !words.length || words.some((w) => `${p.name} ${p.category} ${p.description}`.toLowerCase().includes(w)));
-      return out({ store: s.name, products: hits.map((p) => view(s, p)) });
+      if (credential === undefined) return out({ store: s.name, products: hits.map((p) => view(s, p)) });
+      // The store checks the credential by itself and sorts its own shelf by it. Nothing here calls the gateway.
+      const r = presentToStore(s, asCredential(credential)).body;
+      if (!r.accepted) return out({ store: s.name, mandate: { accepted: false, code: r.code, reason: r.reason }, products: hits.map((p) => view(s, p)) });
+      const reading = new Map<string, { fits: string; why: string }>();
+      for (const k of ["inside", "needs_approval", "outside"] as const) for (const x of r[k]) reading.set(x.sku, { fits: k, why: x.why });
+      const rank = { inside: 0, needs_approval: 1, outside: 2 } as Record<string, number>;
+      const products = hits.map((p) => ({ ...view(s, p), mandate: reading.get(p.sku) ?? { fits: "outside", why: "Not read against the mandate." } })).sort((x, y) => rank[x.mandate.fits] - rank[y.mandate.fits]);
+      return out({ store: s.name, mandate: { accepted: true, store_covered: r.store_covered, store_covered_why: r.store_covered_why, note: r.note }, products });
     });
   server.registerTool("get_product", { title: "Get a product", description: `Full details for one ${s.name} product.`, inputSchema: z.object({ sku: z.string() }) },
     async ({ sku }) => { const p = s.products.find((x) => x.sku === sku); return out(p ? view(s, p) : { error: "No such product" }); });

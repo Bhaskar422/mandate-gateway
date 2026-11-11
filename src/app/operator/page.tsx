@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
+import OperatorLog from "@/components/operator/OperatorLog";
 import Review from "@/components/operator/Review";
+import { operatorLog } from "@/lib/operator-log";
 import PublicShell from "@/components/shell/PublicShell";
 import { demoWallet } from "@/lib/demo-wallet";
 import { listMerchants } from "@/lib/merchants";
@@ -14,6 +16,7 @@ export default async function OperatorPage() {
   return (
     <PublicShell width="max-w-[960px]" nav={false}>
       <Review configured={operatorConfigured()} signedIn={signedIn} merchants={signedIn ? await listMerchants() : []} demoWalletSetAt={signedIn ? (await demoWallet())?.setAt ?? null : null} />
+      {signedIn && <OperatorLog events={await operatorLog()} />}
     </PublicShell>
   );
 }

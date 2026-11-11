@@ -78,7 +78,7 @@ The REST API is described at `/api/v1/openapi.json`. Two endpoints are public: `
 
 ### The mandate credential
 
-A credential lets a store see what an agent may buy without calling the gateway. It works in three steps:
+A credential lets a store see what an agent may buy without calling the gateway. It also carries the gateway's signed word on that store (`store.registered`, `store.verified`), so a store outside the gateway can tell whether a "verified stores only" mandate covers it. The in-app stores' `search_products` takes the credential too and returns the catalogue sorted by what fits the mandate. It works in three steps:
 
 1. The agent gets it from the gateway: `get_credential`, or `GET /api/v1/mandate/credential?store_url=<the store's base address>`.
 2. The agent shows it to the store: the store's `present_mandate` MCP tool, or a plain `POST` to the store's mandate endpoint.
