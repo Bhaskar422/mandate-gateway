@@ -107,6 +107,24 @@ export async function payWithVault(a: OrderInput): Promise<PayResult> {
   return { orderId: r.id, status: r.status, captureId: cap?.id ?? null, captureStatus: cap?.status ?? null, raw: r };
 }
 
+/**
+ * Can this PayPal account be paid at all? Opens an order for the payee that nobody pays (PayPal drops unpaid orders
+ * by itself). Returns a sentence when PayPal says the account does not exist, null when it is fine or cannot be told.
+ */
+export async function payeeProblem(payee: { merchantId: string | null; email: string | null }): Promise<string | null> {
+  // Addresses under these endings can never be real accounts; PayPal only finds that out when a payment is tried.
+  if (!payee.merchantId && /\.(example|invalid|test|localhost)$/i.test(payee.email ?? "")) return `${payee.email} is an example address, not a PayPal account, so this store could not be paid.`;
+  if (paypalSimulated()) return null;
+  const to = payee.merchantId ? { merchant_id: payee.merchantId } : { email_address: payee.email };
+  try { await call(need(gatewayCreds()), "POST", "/v2/checkout/orders", { intent: "CAPTURE", purchase_units: [{ amount: { currency_code: "USD", value: "1.00" }, payee: to }] }); return null; }
+  catch (e) {
+    if (e instanceof PayPalError && (e.issue === "PAYEE_ACCOUNT_INVALID" || e.issue === "INVALID_PARAMETER_SYNTAX" || e.issue === "PAYEE_ACCOUNT_RESTRICTED"))
+      return `PayPal does not know a business account at ${payee.merchantId ?? payee.email}, so this store could not be paid.`;
+    console.error("payee check could not be made:", e);
+    return null;
+  }
+}
+
 // ---- Hold now, charge on shipment: an authorization reserves the money without taking it ----
 
 export type HoldResult = { orderId: string; status: string; authorizationId: string | null; authorizationStatus: string | null; expiresAt: string | null; raw: unknown };

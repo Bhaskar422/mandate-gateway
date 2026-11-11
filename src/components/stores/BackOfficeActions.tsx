@@ -57,6 +57,7 @@ export function DisputeSync({ slug, enabled }: { slug: string; enabled: boolean 
         {result?.error && <ErrorText>{result.error}</ErrorText>}
         {result?.handled && (
           <Banner tone="info" title={result.handled.length ? `PayPal returned ${result.handled.length} ${result.handled.length === 1 ? "dispute" : "disputes"}` : "No disputes on this store's PayPal account"}>
+            {result.handled.length === 0 && "PayPal can take two or three minutes to list a dispute after the buyer opens it. If one was just opened, check again shortly."}
             {result.handled.length > 0 && <ul className="mt-1 space-y-0.5">{result.handled.map((h, i) => <li key={i}><span className="code">{h.disputeId}</span>: {h.action}{h.reason ? ` (${h.reason})` : ""}</li>)}</ul>}
           </Banner>
         )}

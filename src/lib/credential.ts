@@ -6,6 +6,7 @@ import { appUrl } from "./config";
 import { db } from "./db";
 import { activeMandates, committedSpend, type AgentRef } from "./gateway";
 import { newId } from "./ids";
+import { listMerchants } from "./merchants";
 import { publicKeyPem, signPayload } from "./ledger";
 import type { MandateRules } from "./rules";
 import { CREDENTIAL_TYPE, CREDENTIAL_VERSION, normalizeAudience, verifyCredential, type CredentialPayload } from "./stores/verify-mandate";
@@ -16,7 +17,7 @@ export const CREDENTIAL_NOTE = "Payment is made by the gateway, not the agent. T
 export type CredentialSource = { id: string; rulesHash: string; rules: MandateRules; committedCents: number };
 
 /** Build the statement that gets signed. Pure: everything it says is passed in, and only the fields listed here leave the gateway. */
-export function credentialPayload(a: { issuer: string; agentId: string; audience: string | null; mandates: CredentialSource[]; neverBuy: string[]; now?: number; id?: string }): CredentialPayload {
+export function credentialPayload(a: { issuer: string; agentId: string; audience: string | null; mandates: CredentialSource[]; neverBuy: string[]; now?: number; id?: string; store?: { registered: boolean; verified: boolean } }): CredentialPayload {
   const now = a.now ?? Date.now();
   return {
     type: CREDENTIAL_TYPE, version: CREDENTIAL_VERSION, id: a.id ?? newId("cred"), issuer: a.issuer, agent: { id: a.agentId }, audience: a.audience,
@@ -28,6 +29,7 @@ export function credentialPayload(a: { issuer: string; agentId: string; audience
       allowedMerchants: r.merchantPolicy === "allowlist" ? r.allowedMerchants ?? [] : [], expiresAt: r.expiresAt,
     })),
     neverBuy: [...new Set(a.neverBuy)], note: CREDENTIAL_NOTE,
+    ...(a.audience && a.store ? { store: { registered: a.store.registered, verified: a.store.verified } } : {}),
   };
 }
 
@@ -43,7 +45,13 @@ export async function issueCredential(agent: AgentRef, storeUrl?: string | null)
   // "Never buy from X" in any of the user's mandates holds for all of them, so the list is taken from every one.
   const neverBuy = (await activeMandates(agent.userId)).flatMap((m) => m.rules.blockedMerchants ?? []);
   const mandates = await Promise.all(list.map(async (m) => ({ id: m.id, rulesHash: m.rulesHash, rules: m.rules, committedCents: (await committedSpend(db, m.id)).committedCents })));
-  return signPayload(credentialPayload({ issuer: appUrl(), agentId: agent.id, audience, mandates, neverBuy, now }));
+  return signPayload(credentialPayload({ issuer: appUrl(), agentId: agent.id, audience, mandates, neverBuy, now, store: audience ? await storeStanding(audience) : undefined }));
+}
+
+/** Where a store stands with the gateway: registered means it can be paid at all, verified is the operator's review. */
+async function storeStanding(audience: string) {
+  const m = (await listMerchants()).find((x) => normalizeAudience(x.baseUrl) === audience);
+  return { registered: !!m?.payable, verified: !!m?.payable && m.trust === "verified" };
 }
 
 /** The gateway's own check of a credential, for the public verify endpoint. A store does the same offline, and also checks the audience. */

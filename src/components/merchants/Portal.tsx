@@ -38,11 +38,26 @@ function ProveOwnership({ merchantId, baseUrl, token, wellKnownUrl, appUrl, onPr
       <div>
         <p className="mb-1.5 text-sm text-ink-2">Serve this file at <a href={wellKnownUrl} target="_blank" rel="noreferrer" className="link code break-all">{wellKnownUrl}</a></p>
         <CodeBlock label="mandate-merchant.json" code={wellKnownFile(baseUrl, token)} />
-        <p className="field-hint">The token must match exactly. <span className="code">paypal</span> names the account to pay, by <span className="code">email</span> or <span className="code">merchant_id</span>. The two URLs are optional; they must live under your store&apos;s address and are where the gateway sends paid orders and refund requests.</p>
+        <p className="field-hint"><strong>If your store already publishes this file, change only <span className="code">mandate_verification</span> and keep the rest.</strong> The name and PayPal address above are examples: the gateway asks PayPal whether the account exists and refuses one that does not. The token must match exactly. <span className="code">paypal</span> names the account to pay, by <span className="code">email</span> or <span className="code">merchant_id</span>. The two URLs are optional; they must live under your store&apos;s address and are where the gateway sends paid orders and refund requests.</p>
       </div>
       <div className="flex flex-wrap items-center gap-3">
         <Button variant="primary" loading={check.pending} loadingText="Reading the file" onClick={async () => { const r = await check.run(merchantId); if (r) onProved(r.name); }}>Check the file now</Button>
         {check.pending && <span className="text-sm text-ink-3" role="status">The gateway is fetching the file from your site.</span>}
+      </div>
+      {check.error && <ErrorText>{check.error}</ErrorText>}
+    </div>
+  );
+}
+
+/** For a store that has already proved its site: read its file again, to pick up a changed PayPal account or addresses. */
+function ReadAgain({ merchantId, onDone }: { merchantId: string; onDone: () => void }) {
+  const check = useAction(verifyMerchantAction);
+  const [done, setDone] = useState(false);
+  return (
+    <div className="mt-3">
+      <div className="flex flex-wrap items-center gap-3">
+        <Button size="sm" loading={check.pending} loadingText="Reading the file" onClick={async () => { setDone(false); const r = await check.run(merchantId); if (r) { setDone(true); onDone(); } }}>Read the store&apos;s file again</Button>
+        <span className="text-sm text-ink-3" role="status">{done ? "Read. The PayPal account and addresses on file now match the store's file. If the PayPal account changed, the operator reviews the store again before it counts as verified." : "Use this after changing the PayPal account or addresses in the store's file."}</span>
       </div>
       {check.error && <ErrorText>{check.error}</ErrorText>}
     </div>
@@ -79,6 +94,7 @@ function MyStore({ m, insights, appUrl, onChange }: { m: MerchantView; insights?
       ) : (
         <p className="mt-3 text-base text-ink-2">Your store is verified. Mandates that say “known merchants only” allow it.</p>
       )}
+      {m.registeredByMe && m.source === "onboarded" && m.trust !== "pending" && !m.claiming && <ReadAgain merchantId={m.id} onDone={onChange} />}
       {insights && m.trust !== "pending" && (
         <details className="mt-4 border-t border-line pt-4">
           <summary className="link cursor-pointer text-base font-semibold">

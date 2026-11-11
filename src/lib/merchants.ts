@@ -6,6 +6,7 @@ import { db, schema } from "./db";
 import { ensureSeed } from "./gateway";
 import { newId } from "./ids";
 import { append } from "./ledger";
+import { payeeProblem } from "./paypal";
 
 const { merchants, merchantClaims } = schema;
 const newToken = () => `mandate-verify-${newId("t").slice(2)}${newId("t").slice(2)}`;
@@ -73,16 +74,21 @@ export async function verifyMerchantDomain(userId: string, merchantId: string) {
   if (file.mandate_verification !== expected) throw new Error(`${url} does not contain the ownership token issued to this browser yet`);
   const payee = { paypalMerchantId: file.paypal?.merchant_id?.slice(0, 40) || null, paypalEmail: file.paypal?.email?.slice(0, 120) || null };
   if (!payee.paypalMerchantId && !payee.paypalEmail) throw new Error("The file must name the store's PayPal account under paypal.merchant_id or paypal.email");
+  const problem = await payeeProblem({ merchantId: payee.paypalMerchantId, email: payee.paypalEmail });
+  if (problem) throw new Error(`${problem} Put the store's own PayPal business account under "paypal" in the file (merchant_id or email), then check again.`);
+  const payeeChanged = !!m.domainVerifiedAt && (m.paypalMerchantId !== payee.paypalMerchantId || m.paypalEmail !== payee.paypalEmail);
   // Callback URLs must live under the store's own verified base URL.
   const under = (v: string | undefined) => (typeof v === "string" && (v === m.baseUrl || v.startsWith(`${m.baseUrl}/`)) ? v : null);
   const [row] = await db.update(merchants).set({ ...payee, name: (file.name ?? m.name).slice(0, 80), ordersUrl: under(file.orders_url), returnsUrl: under(file.returns_url), catalogUrl: under(file.catalog_url),
     // Whoever published their token is the registrant from now on.
     registeredBy: userId, verificationToken: expected,
+    // A store that changes where its money goes is reviewed again before "verified stores only" mandates pay it.
+    ...(payeeChanged ? { verified: false } : {}),
     // A store may take reserved payments only if it can be told about orders, since that is how it learns to ship and to release.
     supportsHold: file.holds === true && !!under(file.orders_url), domainVerifiedAt: new Date() })
     .where(eq(merchants.id, m.id)).returning();
   await db.delete(merchantClaims).where(eq(merchantClaims.merchantId, m.id));
-  await append({ userId, type: "merchant.verified", payload: { merchantId: m.id, baseUrl: m.baseUrl, name: row.name, payee, ...(claim ? { registrantChanged: true } : {}) } });
+  await append({ userId, type: "merchant.verified", payload: { merchantId: m.id, baseUrl: m.baseUrl, name: row.name, payee, ...(claim ? { registrantChanged: true } : {}), ...(payeeChanged ? { payeeChanged: true, verificationWithdrawn: m.verified } : {}) } });
   return row;
 }
 

@@ -141,6 +141,11 @@ describe("mandate credential: the store's answer", () => {
     expect(read(payload({ neverBuy: ["shop.example"] }))).toMatchObject({ store_covered: "no", inside: [] });
     expect(read(payload({ mandates: [{ id: "m", rulesHash: "h", rules: { ...rules, merchantPolicy: "any_registered" }, committedCents: 0 }] }), { ...store, verified: false }).store_covered).toBe("yes");
   });
+  it("takes the gateway's signed word on the store over the store's own belief", () => {
+    expect(read(payload({ store: { registered: true, verified: true } }), { ...store, verified: undefined }).store_covered).toBe("yes");
+    expect(read(payload({ store: { registered: true, verified: false } }), { ...store, verified: true }).store_covered).toBe("no");
+    expect(read(payload({ store: { registered: false, verified: false } }), { ...store, verified: true }).store_covered).toBe("no");
+  });
   it("uses the best reading across several mandates and skips one that has ended", () => {
     const socks = { id: "m2", rulesHash: "h2", rules: { ...rules, allowedCategories: ["running apparel"] }, committedCents: 0 };
     const ended = { id: "m3", rulesHash: "h3", rules: { ...rules, allowedCategories: ["gift cards"], expiresAt: "2026-11-01T00:00:00.000Z" }, committedCents: 0 };
