@@ -11,11 +11,13 @@ import Banner from "../ui/Banner";
 import { CopyButton } from "../ui/Copy";
 import { Fact, Section } from "../ui/Layout";
 import ChecksList from "./ChecksList";
+import DecisionReveal from "./DecisionReveal";
 import EvidenceTimeline, { type EvidenceEntry } from "./EvidenceTimeline";
 import InjectionWarning from "./InjectionWarning";
 import NegotiationThread from "./NegotiationThread";
 import { ApprovalButtons, CancelHold, OfferCard, ReconcileWithPayPal, ReportProblem } from "./PurchaseActions";
 import { purchaseReason } from "./PurchaseCard";
+import PurchaseStory from "./PurchaseStory";
 
 export type Verification = { ok: true } | { ok: false; why: string };
 type Basics = { id: string; productName: string | null; productUrl: string; amountCents: number; currency: string; status: string; createdAt: string };
@@ -83,6 +85,8 @@ export default function PurchaseDetail({ basics, entries, verification }: { basi
         )}
       </header>
 
+      <PurchaseStory entries={entries} status={status} caseStatus={p?.case?.status ?? null} currency={currency} />
+
       {p && p.signals.length > 0 && <div className="mb-5"><InjectionWarning signals={p.signals} /></div>}
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
@@ -126,18 +130,17 @@ export default function PurchaseDetail({ basics, entries, verification }: { basi
                 <a className="btn btn-secondary btn-sm" href={`/api/purchases/${basics.id}/evidence.pdf`}><FileText size={13} aria-hidden />Evidence PDF</a>
               </div>
               <p className="mt-3 text-sm text-ink-3">Anyone you send the JSON file to can check it on the public <Link href="/verify" className="link">verify page</Link>, without an account.</p>
-              {p?.paypalOrderId && (
-                <div className="mt-4 border-t border-line pt-4">
-                  <p className="mb-2 text-sm text-ink-2">The ledger is the gateway&apos;s account of what happened. PayPal keeps its own. This asks PayPal for the order and compares the two.</p>
-                  <ReconcileWithPayPal purchaseId={basics.id} />
-                </div>
-              )}
             </div>
           </Section>
 
           {p && (
             <Section title="Policy checks" hint="What the gateway checked, in order, before deciding.">
-              <div className="card p-4 sm:p-5"><ChecksList checks={p.checks} /></div>
+              <div className="card p-4 sm:p-5">
+                <div className="mb-4 border-b border-line pb-4">
+                  <DecisionReveal checks={p.checks} outcome={p.outcome} status={p.status} reason={p.reason} reserved={entries.some((e) => e.type === "payment.authorized")} />
+                </div>
+                <ChecksList checks={p.checks} />
+              </div>
             </Section>
           )}
 
@@ -165,6 +168,12 @@ export default function PurchaseDetail({ basics, entries, verification }: { basi
           </Section>
         </div>
       </div>
+
+      {p?.paypalOrderId && (
+        <Section title="PayPal's own record" className="mt-6" hint="The ledger is the gateway's account of what happened. PayPal keeps its own. This asks PayPal for the order and compares the two, fact by fact.">
+          <div className="card p-4 sm:p-5"><ReconcileWithPayPal purchaseId={basics.id} /></div>
+        </Section>
+      )}
     </>
   );
 }

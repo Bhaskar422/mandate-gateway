@@ -105,12 +105,13 @@ export function ReconcileWithPayPal({ purchaseId }: { purchaseId: string }) {
       {r && (r.note ? <p className="mt-2 text-sm text-ink-2">{r.note}</p> : (
         <div className="mt-3" role="status">
           <p className={`text-sm font-semibold ${r.allMatch ? "text-ok-ink" : "text-bad-ink"}`}>{r.allMatch ? "PayPal's record of this order matches the gateway's." : "PayPal's record differs from the gateway's. The rows marked below do not match."}</p>
-          <div className="mt-2 overflow-x-auto rounded-[10px] border border-line">
-            <table className="w-full min-w-[480px] text-sm">
-              <thead><tr className="bg-raised text-left text-ink-3"><th className="px-3 py-2 font-semibold">Fact</th><th className="px-3 py-2 font-semibold">Gateway ledger</th><th className="px-3 py-2 font-semibold">PayPal</th><th className="px-3 py-2 font-semibold">Match</th></tr></thead>
+          {/* A table from the sm breakpoint up, where the section is wide enough for four columns; one block per fact on a phone. */}
+          <div className="mt-2 hidden rounded-[10px] border border-line sm:block">
+            <table className="w-full table-fixed text-sm">
+              <thead><tr className="bg-raised text-left text-ink-3"><th className="w-[24%] rounded-tl-[10px] px-3 py-2 font-semibold">Fact</th><th className="px-3 py-2 font-semibold">Gateway ledger</th><th className="px-3 py-2 font-semibold">PayPal</th><th className="w-20 rounded-tr-[10px] px-3 py-2 font-semibold">Match</th></tr></thead>
               <tbody>
                 {r.rows.map((x) => (
-                  <tr key={x.what} className="border-t border-line">
+                  <tr key={x.what} className="border-t border-line align-top">
                     <td className="px-3 py-2 text-ink">{x.what}</td>
                     <td className="code px-3 py-2 text-ink-2 [overflow-wrap:anywhere]">{x.gateway}</td>
                     <td className="code px-3 py-2 text-ink-2 [overflow-wrap:anywhere]">{x.paypal}</td>
@@ -120,6 +121,17 @@ export function ReconcileWithPayPal({ purchaseId }: { purchaseId: string }) {
               </tbody>
             </table>
           </div>
+          <ul className="mt-2 divide-y divide-line rounded-[10px] border border-line sm:hidden">
+            {r.rows.map((x) => (
+              <li key={x.what} className="p-3">
+                <p className="flex items-baseline justify-between gap-3 text-sm"><span className="font-semibold text-ink">{x.what}</span><span className={`shrink-0 font-semibold ${x.match ? "text-ok-ink" : "text-bad-ink"}`}>{x.match ? "Match" : "No match"}</span></p>
+                <dl className="mt-1.5 grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 text-sm">
+                  <dt className="text-ink-3">Gateway</dt><dd className="code text-ink-2 [overflow-wrap:anywhere]">{x.gateway}</dd>
+                  <dt className="text-ink-3">PayPal</dt><dd className="code text-ink-2 [overflow-wrap:anywhere]">{x.paypal}</dd>
+                </dl>
+              </li>
+            ))}
+          </ul>
         </div>
       ))}
     </div>
