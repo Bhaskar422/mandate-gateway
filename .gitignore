@@ -47,3 +47,6 @@ next-env.d.ts
 # parallel agent worktrees
 .claude/worktrees/
 .next-agent-tests
+
+# Private notes
+*.local.md
