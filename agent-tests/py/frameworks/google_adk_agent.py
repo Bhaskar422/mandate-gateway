@@ -4,9 +4,6 @@
 - planner_executor: a tool-less planner LlmAgent, then an executor LlmAgent (two runners).
 - multi_agent:      ADK's native agent transfer: the shopper LlmAgent has the buyer as a sub-agent and
                     transfers to it; the session keeps the active agent for follow-up turns.
-
-NOT YET RUN AGAINST A LIVE MODEL (no Google key was available when this was written): it imports and
-constructs, and `python -m harness.run --construct-only` checks that.
 """
 from __future__ import annotations
 
@@ -70,7 +67,7 @@ async def create(ctx: AgentContext):
     else:
         buyer = LlmAgent(name="buyer", model=ctx.model, instruction=PROMPTS["buyer"], tools=tools("buyer", "gateway"),
                          description="Pays for a product through the Mandate payment gateway, checks purchases and reports problems.")
-        shopper = LlmAgent(name="shopper", model=ctx.model, instruction=PROMPTS["shopper"], tools=tools("shopper", "store"), sub_agents=[buyer],
+        shopper = LlmAgent(name="shopper", model=ctx.model, instruction=f"{PROMPTS['shopper']}\n\n{PROMPTS['shopper_transfer_suffix']}", tools=tools("shopper", "store"), sub_agents=[buyer],
                            description="Finds products in the Stride Running Co. and Kickz Outlet catalogues. Cannot pay.")
         c = Conversation(shopper)
 
