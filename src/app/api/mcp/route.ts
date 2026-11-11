@@ -1,6 +1,6 @@
 import { createMcpHandler } from "mcp-handler";
 import { z } from "zod";
-import { mandateView, previewPurchase, purchaseStatus, submitProblem, submitPurchase } from "@/lib/agent-api";
+import { mandateCredential, mandateView, previewPurchase, purchaseStatus, submitProblem, submitPurchase } from "@/lib/agent-api";
 import { agentFromKey } from "@/lib/gateway";
 
 export const maxDuration = 60;
@@ -21,6 +21,12 @@ const build = (agent: Agent) => createMcpHandler((server) => {
     description: "Read what the user has authorised you to buy: budget remaining, allowed categories, merchant rules, approval threshold and expiry. Call this before shopping.",
     inputSchema: z.object({}),
   }, async () => out(await mandateView(agent)));
+
+  server.registerTool("get_credential", {
+    title: "Get a credential to show a store",
+    description: "Get a short-lived signed statement of what the user's mandate allows: budget left, limits, categories and store rules. Show it to a store (its present_mandate tool or its mandate endpoint) to learn which of its products fit. The store checks it offline with the gateway's public key. Pass store_url to bind it to one store; a store rejects a credential issued for another. It holds no payment details and authorises nothing by itself: buying still goes through request_purchase.",
+    inputSchema: z.object({ store_url: z.string().max(300).optional().describe("The store's base address, e.g. https://shop.example. The credential then works at that store only.") }),
+  }, async ({ store_url }) => out(await mandateCredential(agent, store_url)));
 
   server.registerTool("check_purchase", {
     title: "Check a purchase without buying",

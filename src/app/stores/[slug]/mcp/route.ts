@@ -2,6 +2,7 @@ import { createMcpHandler } from "mcp-handler";
 import { z } from "zod";
 import { appUrl } from "@/lib/config";
 import { getStore, type Store, type StoreProduct } from "@/lib/stores/catalog";
+import { asCredential, presentToStore, storeUrl } from "@/lib/stores/present";
 
 // Each demo store exposes its catalogue to agents. This is the merchant's server, not the gateway's:
 // whatever it returns is untrusted as far as the gateway is concerned.
@@ -19,7 +20,12 @@ const build = (s: Store) => createMcpHandler((server) => {
     });
   server.registerTool("get_product", { title: "Get a product", description: `Full details for one ${s.name} product.`, inputSchema: z.object({ sku: z.string() }) },
     async ({ sku }) => { const p = s.products.find((x) => x.sku === sku); return out(p ? view(s, p) : { error: "No such product" }); });
-}, { serverInfo: { name: `${s.slug}-store`, version: "1.0.0" } });
+  // The store checks the credential by itself, against the gateway key it has pinned. It does not call the gateway.
+  server.registerTool("present_mandate", { title: "Show this store a mandate credential",
+    description: `Show ${s.name} the credential the Mandate gateway issued for it (get_credential with store_url "${storeUrl(s)}"). The store verifies the signature, expiry and audience offline, then says whether it is covered by the mandate, which of its products fit the categories and limits, and which would need the buyer's approval. This is the store's reading and authorises nothing: the gateway still decides every purchase.`,
+    inputSchema: z.object({ credential: z.union([z.string(), z.record(z.string(), z.unknown())]).describe("The credential exactly as the gateway issued it: { payload, signature }, as an object or as JSON text") }) },
+    async ({ credential }) => out(presentToStore(s, asCredential(credential)).body));
+}, { serverInfo: { name: `${s.slug}-store`, version: "1.1.0" } });
 
 async function handler(req: Request, { params }: { params: Promise<{ slug: string }> }) {
   const s = getStore((await params).slug);

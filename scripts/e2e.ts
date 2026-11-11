@@ -200,6 +200,27 @@ async function main() {
   const verifyCred = async (c: unknown) => (await (await fetch(`${BASE}/api/v1/credentials/verify`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(c) })).json()).valid;
   check("a merchant can verify an agent's authorisation credential", cred.status === 200 && (await verifyCred(cred.json)) === true);
   check("a tampered credential is rejected", (await verifyCred({ ...cred.json, payload: { ...cred.json.payload, agent: { id: "x", name: "someone else" } } })) === false);
+  check("the credential carries bounds and no personal data", cred.json.payload.version === 1 && /^cred_/.test(cred.json.payload.id) && cred.json.payload.audience === null && cred.json.payload.mandates.every((m: { remainingCents?: unknown }) => typeof m.remainingCents === "number")
+    && !/e2e@example\.com|running shoes, known merchants only/.test(JSON.stringify(cred.json)) && !JSON.stringify(cred.json).includes(userId));
+
+  // ---- A store checks the credential by itself --------------------------------------------------
+  const stride = `${BASE}/stores/stride`;
+  const bound = await mcp(G, "get_credential", { store_url: stride }, key);
+  check("an agent gets a credential bound to one store over MCP", bound.payload?.audience === stride && bound.payload.agent.id === agent.id && !!bound.signature, bound.error?.message ?? bound.payload?.id);
+  const shown = await mcp("/stores/stride/mcp", "present_mandate", { credential: bound });
+  check("the store verifies it offline and reads its catalogue against it", shown.accepted === true && Array.isArray(shown.inside) && Array.isArray(shown.needs_approval) && /gateway/.test(shown.note)
+    && !shown.inside.some((p: { sku: string }) => p.sku === "STR-GIFT100"), shown.accepted ? `covered: ${shown.store_covered}; inside ${shown.inside.length}, ask first ${shown.needs_approval.length}, outside ${shown.outside.length}` : shown.reason);
+  const forged = await mcp("/stores/stride/mcp", "present_mandate", { credential: { ...bound, payload: { ...bound.payload, mandates: bound.payload.mandates.map((m: object) => ({ ...m, remainingCents: 9_999_900 })) } } });
+  check("the store rejects a tampered credential", forged.accepted === false && forged.code === "bad_signature", forged.reason);
+  const elsewhere = await mcp("/stores/kickz/mcp", "present_mandate", { credential: bound });
+  check("another store rejects a credential bound to this one", elsewhere.accepted === false && elsewhere.code === "wrong_audience", elsewhere.reason);
+  const unbound = await mcp("/stores/stride/mcp", "present_mandate", { credential: cred.json });
+  check("the store rejects a credential that is not bound to a store", unbound.accepted === false && unbound.code === "unbound", unbound.reason);
+  const viaRest = await rest("GET", `/mandate/credential?store_url=${encodeURIComponent(stride)}`, key);
+  const posted = await fetch(`${stride}/api/mandate`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(viaRest.json) });
+  const wrongStore = await fetch(`${BASE}/stores/kickz/api/mandate`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(viaRest.json) });
+  check("the same check works over plain HTTP", posted.status === 200 && (await posted.json()).accepted === true && wrongStore.status === 401, `stride ${posted.status}, kickz ${wrongStore.status}`);
+
   const rotated = await rotateAgentKey(userId, other.id);
   check("a rotated key replaces the old one", (await rest("GET", "/mandate", otherKey)).status === 401 && (await rest("GET", "/mandate", rotated)).status === 200);
   const head = await (await fetch(`${BASE}/api/ledger/head`)).json();

@@ -4,11 +4,12 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { and, desc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
-import { mandateView, previewPurchase, purchaseStatus, submitProblem, submitPurchase } from "./agent-api";
+import { mandateCredential, mandateView, previewPurchase, purchaseStatus, submitProblem, submitPurchase } from "./agent-api";
 import { appUrl, llmConfigured, llmModel } from "./config";
 import { db, schema } from "./db";
 import { createAgent, type AgentRef } from "./gateway";
 import { STORES, type Store, type StoreProduct } from "./stores/catalog";
+import { asCredential, presentToStore, storeUrl } from "./stores/present";
 
 export const ASSISTANT_NAME = "Mandate shopping assistant";
 export const assistantModel = () => process.env.ASSISTANT_MODEL ?? llmModel();
@@ -67,6 +68,8 @@ const INPUTS = {
   request_purchase: Purchase,
   check_status: z.object({ purchase_id: z.string() }),
   report_problem: z.object({ purchase_id: z.string(), description: z.string().min(5) }),
+  get_credential: z.object({ store: z.string().min(1) }),
+  present_mandate: z.object({ store: z.string().min(1), credential: z.union([z.string(), z.record(z.string(), z.unknown())]) }),
 };
 type ToolName = keyof typeof INPUTS;
 
@@ -98,6 +101,16 @@ async function outsideCatalogues(): Promise<{ shop: string; products: Listed[] }
   }));
 }
 
+/** A shop by name, with the address a credential is bound to. In-app shops answer in-process; outside shops over HTTP. */
+async function findShop(q: string): Promise<{ name: string; url: string; inApp: Store | null } | null> {
+  const x = q.trim().toLowerCase();
+  const s = STORES.find((o) => o.slug === x || o.name.toLowerCase().includes(x));
+  if (s) return { name: s.name, url: storeUrl(s), inApp: s };
+  const rows = await db.select().from(schema.merchants).where(eq(schema.merchants.source, "onboarded"));
+  const m = rows.find((o) => o.domainVerifiedAt && (o.name.toLowerCase().includes(x) || o.baseUrl.toLowerCase().includes(x)));
+  return m ? { name: m.name, url: m.baseUrl, inApp: null } : null;
+}
+
 const tools = (shops: string): Anthropic.Tool[] => [
   { name: "search_products", description: `Search the catalogues of the shops this gateway knows: ${shops}. Returns products with prices and product page URLs. An empty query returns everything.`,
     input_schema: { type: "object", properties: { query: { type: "string" }, store: { type: "string", description: "Optional shop name, or part of it, to search only that shop" } } } },
@@ -109,6 +122,10 @@ const tools = (shops: string): Anthropic.Tool[] => [
   { name: "check_status", description: "The current status of a purchase you requested.", input_schema: { type: "object", properties: { purchase_id: { type: "string" } }, required: ["purchase_id"] } },
   { name: "report_problem", description: "Tell the gateway something went wrong with a paid purchase (wrong item, damaged, not received). It sends the store the signed record and settles a refund, partial refund or replacement.",
     input_schema: { type: "object", properties: { purchase_id: { type: "string" }, description: { type: "string", description: "What the user says went wrong" } }, required: ["purchase_id", "description"] } },
+  { name: "get_credential", description: "Optional. Get a short-lived signed statement of what the mandate allows, bound to one shop, to show that shop with present_mandate. It holds no payment details and authorises nothing; buying still goes through request_purchase. Use it when the user asks what a shop would accept under their mandate.",
+    input_schema: { type: "object", properties: { store: { type: "string", description: "The shop's name" } }, required: ["store"] } },
+  { name: "present_mandate", description: "Optional. Show a shop the credential from get_credential. The shop checks it by itself and says whether it is covered, which of its products fit the categories and limits, and which would need the user's approval. This is the shop's reading; the gateway still decides.",
+    input_schema: { type: "object", properties: { store: { type: "string", description: "The same shop the credential was issued for" }, credential: { type: "object", description: "The credential exactly as get_credential returned it: { payload, signature }" } }, required: ["store", "credential"] } },
 ];
 
 type StepResult = { result: unknown; summary: string; tone: "ok" | "warn" | "bad" | "neutral"; purchaseId?: string; approvalUrl?: string };
@@ -130,6 +147,8 @@ const LABELS: Record<ToolName, (i: Record<string, unknown>) => string> = {
   request_purchase: () => "Asking the gateway to buy it",
   check_status: () => "Checking the purchase",
   report_problem: () => "Reporting the problem to the gateway",
+  get_credential: () => "Getting a credential to show the shop",
+  present_mandate: () => "Showing the shop your mandate's limits",
 };
 
 async function runTool(agent: AgentRef, name: ToolName, raw: unknown): Promise<StepResult> {
@@ -164,6 +183,21 @@ async function runTool(agent: AgentRef, name: ToolName, raw: unknown): Promise<S
       const d = parsed.data as z.infer<typeof INPUTS.report_problem>;
       const r = await submitProblem(agent, d.purchase_id, d.description);
       return "error" in r ? { result: r, summary: String(r.error), tone: "bad" } : { result: r, summary: r.message.slice(0, 160), tone: r.status === "refunded" || r.status === "settled" ? "ok" : "warn", purchaseId: d.purchase_id };
+    }
+    case "get_credential": case "present_mandate": {
+      const d = parsed.data as { store: string; credential?: unknown };
+      const shop = await findShop(d.store);
+      if (!shop) return { result: { error: "No such shop" }, summary: "No such shop", tone: "bad" };
+      if (name === "get_credential") {
+        const c = await mandateCredential(agent, shop.url);
+        return "error" in c ? { result: c, summary: c.error.message, tone: "warn" } : { result: c, summary: `Credential for ${shop.name}, valid for 15 minutes`, tone: "neutral" };
+      }
+      const credential = asCredential(d.credential);
+      const r: { accepted?: boolean; inside?: unknown[]; needs_approval?: unknown[] } = shop.inApp ? presentToStore(shop.inApp, credential).body
+        : await fetch(`${shop.url}/api/mandate`, { method: "POST", redirect: "error", signal: AbortSignal.timeout(8000), headers: { "Content-Type": "application/json" }, body: JSON.stringify(credential) })
+          .then((x) => x.json()).catch(() => ({ accepted: false, reason: "The shop did not answer." }));
+      return r.accepted ? { result: r, summary: `${shop.name}: ${r.inside?.length ?? 0} fit, ${r.needs_approval?.length ?? 0} would ask you first`, tone: "neutral" }
+        : { result: r, summary: `${shop.name} did not accept the credential`, tone: "warn" };
     }
   }
 }

@@ -70,9 +70,46 @@ Agents use either door with the same key (`Authorization: Bearer mk_...`):
 | `request_purchase` | `POST /purchases` | Buy one product |
 | `check_status` | `GET /purchases/{id}` | Where a purchase stands |
 | `report_problem` | `POST /purchases/{id}/problems` | Start a refund or settlement |
-| | `GET /mandate/credential` | A short-lived signed proof of authorisation the agent can show a merchant |
+| `get_credential` | `GET /mandate/credential` | A short-lived signed statement of what the mandate allows, for the agent to show a store. Pass `store_url` to bind it to one store |
 
-The REST API is described at `/api/v1/openapi.json`. Two endpoints are public: `POST /api/v1/credentials/verify` checks a credential an agent presented, and `GET /api/ledger/head` returns the signed head of the evidence ledger, so anyone can record it and later prove the ledger was not rewritten.
+The REST API is described at `/api/v1/openapi.json`. Two endpoints are public: `POST /api/v1/credentials/verify` checks a credential with the gateway, and `GET /api/ledger/head` returns the signed head of the evidence ledger, so anyone can record it and later prove the ledger was not rewritten.
+
+### The mandate credential
+
+A credential lets a store see what an agent may buy without calling the gateway. It works in three steps:
+
+1. The agent gets it from the gateway: `get_credential`, or `GET /api/v1/mandate/credential?store_url=<the store's base address>`.
+2. The agent shows it to the store: the store's `present_mandate` MCP tool, or a plain `POST` to the store's mandate endpoint.
+3. The store checks it offline with the gateway's public key and answers from its own catalogue.
+
+A credential authorises nothing by itself. Payment still goes through `request_purchase`, where the policy engine decides. It holds no payment details, no buyer name or email, and none of the mandate's own wording.
+
+The credential is `{ payload, signature, algorithm }`. The fields of `payload`:
+
+| Field | Meaning |
+|---|---|
+| `type`, `version` | Always `"mandate.authorisation"` and `1` |
+| `id` | Unique to this credential, `cred_...` |
+| `issuer` | The gateway's address. Its public key is at `<issuer>/.well-known/mandate-gateway.json` |
+| `agent.id` | The agent it was issued to. An id, not a key |
+| `audience` | The base address of the one store it is for (scheme, host and path, no trailing slash), or `null` |
+| `issuedAt`, `expiresAt` | ISO 8601 times, 15 minutes apart |
+| `mandates[]` | One entry for each mandate in force for the agent |
+| `mandates[].id`, `.rulesHash` | The mandate's id and the SHA-256 of its rules |
+| `mandates[].currency` | ISO 4217 code. Amounts are in cents of it |
+| `mandates[].remainingCents` | Budget left when the credential was issued |
+| `mandates[].perPurchaseLimitCents` | Most for one purchase, or `null` |
+| `mandates[].approvalThresholdCents` | The ask-first amount: above it the buyer must approve. Or `null` |
+| `mandates[].allowedCategories` | What the agent may buy, as short product categories |
+| `mandates[].merchantPolicy` | `verified_only`, `allowlist` or `any_registered` |
+| `mandates[].allowedMerchants` | The named stores when the policy is `allowlist`; otherwise empty |
+| `mandates[].expiresAt` | When the mandate ends |
+| `neverBuy` | Stores the buyer said never to buy from |
+| `note` | A reminder that the credential authorises nothing by itself |
+
+**Signing.** `signature` is a base64 Ed25519 signature over the canonical JSON of `payload`, as UTF-8. Canonical JSON here means: object keys sorted, no whitespace, arrays in order, keys whose value is undefined left out, everything else as `JSON.stringify` writes it.
+
+**Verifying.** A store reads the gateway's public key once from `/.well-known/mandate-gateway.json` (`evidence.publicKey`, PEM) and keeps it. For each credential it then checks, with no network call: the signature over the canonical payload; that every field above is present and well formed; that `issuer` is the gateway it trusts; that `expiresAt` has not passed and the lifetime is no more than an hour; and that `audience` equals its own base address. A credential with no audience is rejected by stores. The whole check is in [`src/lib/stores/verify-mandate.ts`](src/lib/stores/verify-mandate.ts), which depends only on Node's crypto module, so a store can copy the file as it is. The developers page (`/developers#credential`) has a short sample.
 
 ## For merchants
 
@@ -86,7 +123,9 @@ Stores join in the merchant portal (`/for-merchants`), which is separate from a 
 
 A store is managed from the browser that proved it owns the site, and that browser sees the store's agent sales report. On a new browser the seller registers the same address again, gets a token of their own, and publishing it moves the store to that browser. The file can also say where to send paid orders and return requests, where the catalogue is, and whether the store accepts reserved payments. The gateway refuses private addresses, requires https, and only accepts callback URLs under the store's own address. Operator decisions are written to the signed ledger.
 
-Two demo shops live outside this repository, each with its own deployment, and join the same way any outside merchant would: [Tidewater Coffee Roasters](https://tidewater-coffee-pi.vercel.app) ([source](https://github.com/Bhaskar422/tidewater-coffee)) and [Fern & Field](https://fern-and-field.vercel.app) ([source](https://github.com/Bhaskar422/fern-and-field)).
+A store can also read an agent's mandate credential (see "The mandate credential" above). Each demo store has a `present_mandate` tool on its catalogue server (`/stores/<name>/mcp`) and the same check as plain HTTP at `POST /stores/<name>/api/mandate`. The store verifies the credential against the gateway key it has pinned, without calling the gateway. It rejects one that was changed, has expired, or was issued for another store, and says why. Otherwise it answers with its own reading: whether the mandate's store rule covers it as far as it can tell, which of its products are inside the stated categories and limits, which would need the buyer's approval, and which are outside. The match is on the catalogue's category and price only. It authorises nothing: the gateway still decides every purchase.
+
+Two demo shops live outside this repository, each with its own deployment, join the same way any outside merchant would, and check credentials the same way (`present_mandate` on `/mcp`, and `POST /api/mandate`): [Tidewater Coffee Roasters](https://tidewater-coffee-pi.vercel.app) ([source](https://github.com/Bhaskar422/tidewater-coffee)) and [Fern & Field](https://fern-and-field.vercel.app) ([source](https://github.com/Bhaskar422/fern-and-field)).
 
 ## Architecture
 
@@ -147,7 +186,7 @@ Without PayPal credentials the gateway runs with clearly labelled simulated paym
 ## Tests
 
 ```bash
-pnpm test                                             # unit tests: policy engine, page scanner, evidence ledger
+pnpm test                                             # unit tests: policy engine, page scanner, evidence ledger, mandate credential
 pnpm exec tsx --env-file=.env.local scripts/e2e.ts    # end-to-end checks over MCP and REST against a running server
 pnpm exec tsx --env-file=.env.local scripts/mandate-adversarial.ts   # hostile and ambiguous mandate texts through the compiler and the code check
 pnpm exec tsx --env-file=.env.local scripts/hold-check.ts            # reserve, charge on shipment, cancel, each compared with PayPal
