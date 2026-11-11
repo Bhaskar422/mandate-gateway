@@ -1,4 +1,4 @@
-import { boolean, integer, jsonb, pgTable, primaryKey, serial, text, timestamp } from "drizzle-orm/pg-core";
+import { boolean, index, integer, jsonb, pgTable, primaryKey, serial, text, timestamp } from "drizzle-orm/pg-core";
 import type { Decision } from "../policy";
 import type { MandateRules } from "../rules";
 import type { ProductSnapshot } from "../product";
@@ -212,6 +212,17 @@ export const gatewaySettings = pgTable("gateway_settings", {
   value: jsonb("value").$type<Record<string, unknown>>().notNull(),
   updatedAt: ts("updated_at").notNull().defaultNow(),
 });
+
+/** A product an agent found at a store that has not joined the gateway, so it could not be bought. No user and no request text. */
+export const unmetDemand = pgTable("unmet_demand", {
+  id: text("id").primaryKey(),
+  domain: text("domain").notNull(),
+  productTitle: text("product_title").notNull(),
+  category: text("category"),
+  priceCents: integer("price_cents"),
+  currency: text("currency"),
+  createdAt: ts("created_at").notNull().defaultNow(),
+}, (t) => [index("unmet_demand_domain_idx").on(t.domain, t.createdAt)]);
 
 /**
  * A browser that did not register a store can still ask to manage it. It gets its own token, and becomes the

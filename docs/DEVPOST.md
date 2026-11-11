@@ -47,6 +47,7 @@ Mandate is a gateway between any AI shopping agent and the buyer's PayPal accoun
 - If a buyer opens a PayPal dispute, the store's agent answers it through the Disputes API with that signed record as evidence.
 - Before a complaint becomes a dispute, the gateway compares its signed record with the store's own order book and shows the buyer whose account the two records support. Most are settled there, by the records.
 - A store can check a buyer's mandate by itself: the agent presents a signed credential bound to that store, and the store verifies it offline with the gateway's public key, with no call to the gateway.
+- A store that has not joined can see what it is missing: when the assistant finds a product at such a store (through Channel3's catalogue) it cannot buy it, and the merchants page counts those by store.
 - It sees an agent sales report: revenue, blocked requests grouped by the rule that stopped them, and suggestions such as "13 requests worth $1,820 were blocked only because the store is not verified".
 
 **For both**

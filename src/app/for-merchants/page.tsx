@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import MerchantPortal from "@/components/merchants/Portal";
+import UnmetDemand from "@/components/merchants/UnmetDemand";
+import { unmetDemand } from "@/lib/channel3";
 import PublicShell from "@/components/shell/PublicShell";
 import { appUrl } from "@/lib/config";
 import { insightsForRegistrant } from "@/lib/merchant-insights";
@@ -14,6 +16,6 @@ export const maxDuration = 60; // proving ownership fetches a file from the stor
 export default async function ForMerchantsPage() {
   const userId = await currentUserId();
   // Insights are loaded only for stores this browser registered; the check is on merchants.registeredBy, on the server.
-  const [merchants, insights] = await Promise.all([listMerchants(userId), insightsForRegistrant(userId)]);
-  return <PublicShell width="max-w-[960px]"><MerchantPortal merchants={merchants} insights={insights} appUrl={appUrl()} /></PublicShell>;
+  const [merchants, insights, unmet] = await Promise.all([listMerchants(userId), insightsForRegistrant(userId), unmetDemand(14)]);
+  return <PublicShell width="max-w-[960px]"><MerchantPortal merchants={merchants} insights={insights} appUrl={appUrl()} /><UnmetDemand stores={unmet} days={14} /></PublicShell>;
 }
