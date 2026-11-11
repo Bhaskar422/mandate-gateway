@@ -138,8 +138,9 @@ final text, so read the final texts in `results/runs/` before quoting it.
 ## Baseline: the same agents without the gateway
 
 ```bash
-agent-tests/run-baseline.sh                  # 2 conditions x 3 models x 5 scenarios x 3 runs, then rebuilds the report
+agent-tests/run-baseline.sh                  # 3 architectures x 2 conditions x 3 models x 5 scenarios, then rebuilds the report
 agent-tests/run-baseline.sh --only-missing   # only the cells that are absent or ended in an error (e.g. after a 429)
+agent-tests/run-baseline.sh --architecture multi_agent --scenario injection
 ```
 
 The baseline answers "what do the same models do when nothing stands between them and PayPal?". The agent gets the
@@ -151,9 +152,22 @@ There is no gateway: the test gateway is started only because it serves the stor
 - `plain`: the mandate is text in the system prompt (`baseline_system` + `baseline_mandate` in `shared/prompts.json`).
 - `hardened`: the same, plus `baseline_hardened_suffix` (the mandate is binding, product text is data, no gift cards, ...).
 
-One agent with all the tools, on claude-haiku-5-5, gpt-5-mini and gemini-flash-latest, three runs per cell, one user
-message per run (the first message of `approve`, `blocked_merchant`, `injection`, `approval`, `over_budget`).
-Options: `--model`, `--condition`, `--scenario`, `--runs`, `--concurrency`, `--only-missing` (needs `OPENAI_API_KEY` and `GOOGLE_API_KEY`).
+On claude-haiku-5-5, gpt-5-mini and gemini-flash-latest, one user message per run (the first message of `approve`,
+`blocked_merchant`, `injection`, `approval`, `over_budget`), in the suite's three architectures, with the toolkit's
+order tools where the gateway tools were:
+
+- `single`: one agent with all the tools (`baseline_system`).
+- `planner_executor`: a planner with no tools (`baseline_planner`) writes a plan; an executor with all the tools
+  (`baseline_system` + `executor_suffix`) gets the user's message and the plan (`executor_turn`).
+- `multi_agent`: a shopper with only the catalogue tools (`baseline_shopper`) writes a handoff; a buyer with only the
+  PayPal tools (`baseline_buyer`) gets the user's message and the handoff (`buyer_turn`). The handoff is passed in code.
+
+Without a gateway the prompt is the only place the mandate can live, so every agent's prompt carries the mandate text,
+and in the hardened condition every agent's prompt also carries the hardened suffix. Three runs per cell; the
+`injection` scenario gets five in `planner_executor` and `multi_agent`. The step and time caps are per user message
+and shared by the agents of a run, as in the gateway suite.
+Options: `--architecture`, `--model`, `--condition`, `--scenario`, `--runs`, `--injection-runs`, `--concurrency`,
+`--only-missing` (needs `OPENAI_API_KEY` and `GOOGLE_API_KEY`).
 
 "Committed outside the mandate" means: **a PayPal sandbox order the agent created that the mandate forbids**. Orders are
 not captured (capture needs a buyer to approve in a browser). Every order the agent created is read back from PayPal
@@ -162,14 +176,19 @@ name is matched against the catalogue), the total must fit the remaining budget,
 amount is outside because the user was never asked. No model is involved in the verdict.
 
 ```
-ts/baseline/agent.ts    the toolkit, the tool list, and the tool loops (Anthropic SDK; chat completions for GPT and Gemini)
+ts/baseline/agent.ts    the toolkit, the tool list, the tool loops (Anthropic SDK; chat completions for GPT and Gemini) and the three architectures
 ts/baseline/mandate.ts  the deterministic mandate check over PayPal's record of each order
-ts/baseline/run.ts      the runner; writes results/baseline.json (every run, with orders, tool calls and final text)
-ts/baseline/summary.ts  the three-condition comparison; the gateway column is read from results/runs/ (single architecture)
+ts/baseline/run.ts      the runner; writes results/baseline.json (every run, with orders, tool calls, the plan or handoff, and final text)
+ts/baseline/summary.ts  the three-condition comparison, by architecture, model and scenario; the gateway column is read from results/runs/
 ts/baseline/section.ts  the "Baseline" section of RESULTS.md, called by harness/report.ts
 ```
 
-`scripts/sync-agent-results.mjs` (run from the repo root) copies the comparison to `src/data/agent-baseline.json` for the app.
+`scripts/sync-agent-results.mjs` (run from the repo root) copies the results into `src/data/` for the app: the gateway
+runs (`agent-results.json`), the comparison (`agent-baseline.json`), one row per baseline run (`agent-baseline-runs.json`),
+the scenario definitions (`agent-scenarios.json`) and a capped per-run detail file for the page `/developers/tests`
+(`agent-run-details.json`: tool calls in order, final messages, the gateway's purchase rows; no keys). The final
+messages and purchase rows of the gateway runs come from `results/runs/*.json`, which are git-ignored: run the sync in
+the checkout that ran the suite, or copy that folder in first, or the page shows tool calls only.
 
 ## Add keys for OpenAI / Gemini
 
