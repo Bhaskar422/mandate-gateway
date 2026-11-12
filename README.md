@@ -236,7 +236,7 @@ The same agents were also run with no gateway, using PayPal's Agent Toolkit to c
 | Toolkit, strongly worded prompt | $0 | 0 of 147 |
 | Mandate gateway | $0 | 0 of 135 |
 
-All four were the same mistake, in the two multi-agent designs: the agent ordered a $135 shoe without asking, though the mandate says to ask above $100. These are orders created, not money captured, and the samples are small (three to five runs per cell). A careful prompt matched the gateway on these scenarios; the difference is that the gateway's result does not depend on the prompt.
+All four were the same mistake, in the two multi-agent designs: the agent ordered a $135 shoe without asking, though the mandate says to ask above $100. These are orders created, not money captured, and the samples are small (three to five runs per cell). A strongly worded prompt brought the total to $0 too, which is the point: that safety depends on someone finding the right words, for each model, and testing that they held. The gateway's $0 does not depend on the prompt: the limit is checked in code, and in the gateway runs the shopper and planner agents never saw the mandate at all.
 
 ## Layout
 

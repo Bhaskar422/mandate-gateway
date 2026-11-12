@@ -83,7 +83,7 @@ Claude drafts mandates, classifies products and frames problem reports. The desi
 
 - Everything runs against the PayPal sandbox with real sandbox money: payments, reservations, refunds, part refunds and a dispute resolved in the seller's favour.
 - Agents in nine frameworks (Anthropic SDK, Claude Agent SDK, Vercel AI SDK, LangGraph in TypeScript and Python, CrewAI, Pydantic AI, OpenAI Agents SDK, Google ADK), three designs and six scenarios: 204 of 204 runs pass, and nothing the mandate forbids was paid in any of them. Every run can be browsed with its tool calls and the gateway's decisions.
-- The same agents with no gateway, using PayPal's Agent Toolkit and the mandate as text in the prompt, created $540 of orders the mandate forbids in 4 of 147 runs. With the gateway: $0. A strongly worded prompt also reached $0, so the claim we make is narrower: the gateway's result does not depend on the prompt.
+- The same agents with no gateway, using PayPal's Agent Toolkit and the mandate as text in the prompt, created $540 of orders the mandate forbids in 4 of 147 runs. Rewording the prompt more forcefully brought that to $0 too, which is the point: that safety depends on someone finding the right words, for each model, and testing that they held. With the gateway the result was $0, and it does not depend on the prompt: the limit is checked in code, and the shopper and planner agents never saw the mandate at all.
 - One model followed a product page's hidden instruction and asked for a $100 gift card. The gateway blocked it.
 - 44 end-to-end checks pass on the live deployment, plus 77 unit tests and 14 hostile or ambiguous mandate texts.
 - Two demo stores live in their own repositories and deployments and join the way any outside merchant would.
