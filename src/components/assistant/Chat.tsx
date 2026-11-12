@@ -3,7 +3,7 @@ import { ArrowUp, Ban, Check, CircleAlert, Clock, LoaderCircle, RotateCcw, Spark
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { restartAssistantAction } from "@/app/actions";
-import type { AssistantEvent } from "@/lib/assistant";
+import type { AssistantEvent, FoundProduct } from "@/lib/assistant";
 import { useAccount } from "../AccountProvider";
 import DemoWalletButton from "../DemoWalletButton";
 import DecisionReveal from "../purchases/DecisionReveal";
@@ -12,7 +12,7 @@ import Button from "../ui/Button";
 import { PageHeader } from "../ui/Layout";
 import { useAction } from "../useAction";
 
-type Step = { id: string; label: string; summary?: string; tone?: "ok" | "warn" | "bad" | "neutral"; purchaseId?: string; approvalUrl?: string };
+type Step = { id: string; label: string; summary?: string; tone?: "ok" | "warn" | "bad" | "neutral"; purchaseId?: string; approvalUrl?: string; products?: FoundProduct[] };
 type Msg = { role: "user"; text: string } | { role: "assistant"; text: string; steps: Step[]; error?: string };
 
 const STORE_KEY = "mandate.assistant.chat";
@@ -36,6 +36,34 @@ function StepDecision({ purchaseId, live }: { purchaseId: string; live: boolean 
   return <DecisionReveal checks={p.checks} outcome={p.outcome} status={p.status} reason={p.reason} autoPlay={live} collapseAfter replayLabel="Replay" />;
 }
 
+/** Products found at stores that have not joined: a picture, the price and a link out. None of them can be bought here. */
+function FoundProducts({ products }: { products: FoundProduct[] }) {
+  return (
+    <div className="mt-1 basis-full border-t border-line pt-2.5">
+      <ul className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
+        {products.map((p) => (
+          <li key={p.link} className="min-w-0">
+            <a href={p.link} target="_blank" rel="noreferrer noopener" className="flex h-full flex-col overflow-hidden rounded-lg border border-line transition-colors hover:border-line-strong">
+              <span className="flex aspect-square items-center justify-center bg-white">
+                {p.image
+                  // eslint-disable-next-line @next/next/no-img-element
+                  ? <img src={p.image} alt="" loading="lazy" referrerPolicy="no-referrer" className="size-full object-contain p-2" onError={(e) => { e.currentTarget.style.visibility = "hidden"; }} />
+                  : <span className="px-2 text-center text-xs text-neutral-500">No picture</span>}
+              </span>
+              <span className="flex flex-1 flex-col gap-0.5 border-t border-line px-2.5 py-2">
+                <span className="line-clamp-2 text-sm font-medium text-ink [overflow-wrap:anywhere]">{p.title}</span>
+                {p.price && <span className="num text-sm text-ink-2">{p.currency && p.currency !== "USD" ? `${p.price} ${p.currency}` : `$${p.price}`}</span>}
+                <span className="code mt-auto pt-1 text-xs text-ink-3 [overflow-wrap:anywhere]">{p.store}<span className="sr-only"> (opens in a new tab)</span></span>
+              </span>
+            </a>
+          </li>
+        ))}
+      </ul>
+      <p className="mt-2 text-xs text-ink-3">These stores have not joined, so the gateway cannot pay them. Each card opens the store&apos;s page. Product search by Channel3.</p>
+    </div>
+  );
+}
+
 function StepRow({ s, decision, live }: { s: Step; decision: boolean; live: boolean }) {
   const icon = !s.summary ? <LoaderCircle size={14} className="spin" aria-hidden />
     : s.tone === "ok" ? <Check size={14} aria-hidden /> : s.tone === "bad" ? <Ban size={14} aria-hidden /> : s.tone === "warn" ? <Clock size={14} aria-hidden /> : <Check size={14} aria-hidden />;
@@ -52,6 +80,7 @@ function StepRow({ s, decision, live }: { s: Step; decision: boolean; live: bool
           <Link href={`/purchases/${s.purchaseId}`} className="btn btn-secondary btn-sm">Open the record</Link>
         </span>
       )}
+      {s.products && s.products.length > 0 && <FoundProducts products={s.products} />}
       {s.purchaseId && decision && <div className="mt-1 basis-full border-t border-line pt-2.5 empty:hidden"><StepDecision purchaseId={s.purchaseId} live={live} /></div>}
     </li>
   );
@@ -95,7 +124,7 @@ export default function Chat() {
     const apply = (e: AssistantEvent) => {
       if (e.type === "text") patch((m) => { m.text += e.delta; });
       else if (e.type === "step") patch((m) => { if (m.text && !m.text.endsWith("\n")) m.text += "\n\n"; m.steps.push({ id: e.id, label: e.label }); });
-      else if (e.type === "step_done") { if (e.purchaseId) live.current.add(e.id); patch((m) => { const s = m.steps.find((x) => x.id === e.id); if (s) Object.assign(s, { summary: e.summary, tone: e.tone, purchaseId: e.purchaseId, approvalUrl: e.approvalUrl }); }); refresh(); }
+      else if (e.type === "step_done") { if (e.purchaseId) live.current.add(e.id); patch((m) => { const s = m.steps.find((x) => x.id === e.id); if (s) Object.assign(s, { summary: e.summary, tone: e.tone, purchaseId: e.purchaseId, approvalUrl: e.approvalUrl, products: e.products }); }); refresh(); }
       else if (e.type === "error") patch((m) => { m.error = e.message; });
       else if (e.type === "done") setLeft(e.remaining);
     };
