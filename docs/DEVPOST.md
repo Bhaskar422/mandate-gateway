@@ -15,7 +15,7 @@ Proof for every agent purchase on PayPal: agents buy inside rules the buyer set,
 **Built with:**
 
 ```text
-paypal, next.js, typescript, react, postgresql, neon, vercel, drizzle, model-context-protocol, claude, anthropic, tailwindcss, python, openai, gemini
+paypal, next.js, typescript, react, postgresql, neon, vercel, drizzle, model-context-protocol, claude, anthropic, channel3, tailwindcss, python, openai, gemini
 ```
 
 **Links:**
@@ -54,6 +54,14 @@ Mandate is a gateway between any AI shopping agent and the buyer's PayPal accoun
 
 Every step is written to a hash-chained, Ed25519-signed ledger. Anyone can verify a record without an account, and any purchase can be compared fact by fact with PayPal's own record of the order.
 
+## How we used Channel3
+
+A payment gateway for agents has a cold start: it is only useful at the stores that have joined. We used Channel3's product search to deal with both sides of that.
+
+- **For the shopper:** when none of the joined stores sells what was asked for, the assistant searches Channel3's catalogue and reports real products with the store, price and link. It says plainly that it cannot buy them, because the gateway only pays stores that have registered and proved who they are. Asked for an electric gooseneck kettle on the live site, it found six, one of them at $39.95.
+- **For the store:** each of those results is counted against the store it came from, with no shopper and no request text kept. The merchants page shows "Where agents looked and could not buy": the stores, how many products agents found there, and the list prices added up. A store that has not joined sees demand it is missing, in dollars, on the page where it can register.
+- **The line we kept:** Channel3 decides what the assistant can find, never what the gateway will pay. Finding a product does not make its store payable.
+
 ## How we built it
 
 Next.js 15 and TypeScript on Vercel, PostgreSQL on Neon with Drizzle, and the Model Context Protocol for the agent interface, with a REST API beside it.
@@ -87,9 +95,9 @@ Agent safety for payments is not a prompting problem. The useful boundary is bet
 ## What's next for Mandate Gateway
 
 - Production PayPal, with partner onboarding for stores.
-- Signed requests between stores and the gateway, in place of proving identity with a payment id.
-- A real product catalogue for agents to shop.
-- Mandates expressed as verifiable credentials a store can check directly.
+- Signed requests from the outside stores too: the demo stores inside the app sign today, and the two outside ones have the support but no key set.
+- Telling a store found through Channel3 what agents wanted from it, so the list of missed demand becomes an invitation to join.
+- Mandate-sorted search at outside stores: the in-app stores already rank their catalogue by a presented credential.
 
 ## Where the numbers come from
 

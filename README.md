@@ -131,6 +131,18 @@ A store can sign what it sends to the gateway. It adds `signing_key`, an Ed25519
 
 Two demo shops live outside this repository, each with its own deployment, join the same way any outside merchant would, and check credentials the same way (`present_mandate` on `/mcp`, and `POST /api/mandate`): [Tidewater Coffee Roasters](https://tidewater-coffee-pi.vercel.app) ([source](https://github.com/Bhaskar422/tidewater-coffee)) and [Fern & Field](https://fern-and-field.vercel.app) ([source](https://github.com/Bhaskar422/fern-and-field)).
 
+## Channel3: the stores that have not joined
+
+A gateway like this starts with few stores, and an agent that can only see those stores gives a poor answer to most requests. Channel3's product catalogue is how Mandate answers honestly anyway, and how it finds the next stores to bring in.
+
+**What the shopper sees.** When no joined store has what was asked for, the built-in assistant calls its `search_other_stores` tool, which sends the request to Channel3's search API (`POST https://api.trychannel3.com/v1/search`). For each product it keeps the title, brand, category and the best offer (in stock first, then cheapest), and tells the shopper the store, the price and the link. It says in plain words that it cannot buy these: the store is not registered, so the policy engine would block the payment, and the assistant is told never to try.
+
+**What the store sees.** Every product found this way is written to one table with the store's domain, the product title, its category and its list price. No shopper and none of the request's wording is kept. The merchants page (`/for-merchants`) lists, for the last 14 days, the stores agents found products at and could not buy from, with the count and the list prices added up. That list is the case put to a store for joining: these are orders an agent wanted to place with you.
+
+**Where the line is.** Channel3 widens what the assistant can find. It does not widen what the gateway will pay: a store found through Channel3 becomes payable only after it registers, proves it owns its site and gives a PayPal payee, the same as any other store.
+
+The tool is offered to the assistant only when `CHANNEL3_API_KEY` is set. The code is in `src/lib/channel3.ts`, and the reading of Channel3's reply is unit-tested in `tests/channel3.test.ts`.
+
 ## Architecture
 
 ```
