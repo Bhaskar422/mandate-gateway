@@ -50,3 +50,6 @@ next-env.d.ts
 
 # Private notes
 *.local.md
+
+# Voiceover clips, screen recordings and the assembled demo video
+video/
