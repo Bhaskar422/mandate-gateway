@@ -123,6 +123,7 @@ export default function DevelopersPage() {
             <AgentSetup appUrl={base} agentKey={KEY_PLACEHOLDER} />
           </div>
           <p className="max-w-3xl text-sm text-ink-3">Each demo store has its own catalogue server with <span className="code">search_products</span>, <span className="code">get_product</span> and <span className="code">present_mandate</span>, which takes a <a href="#credential" className="link">mandate credential</a>. It is the store&apos;s server, not the gateway&apos;s, so whatever it returns is untrusted as far as the gateway is concerned.</p>
+          <p className="max-w-3xl text-sm text-ink-3"><span className="code">search_products</span> also takes that credential, as an optional <span className="code">credential</span> argument. With it, each product comes back with a <span className="code">mandate</span> field saying whether it fits and why, and the list is ordered: products inside the mandate first, then those that would need the buyer&apos;s approval, then those outside it. Without it the search works as before. The two outside stores do not sort their search yet; they answer <span className="code">present_mandate</span> only.</p>
           <div className="card divide-y divide-line">
             {TOOLS.map((t) => (
               <div key={t.name} className="grid gap-1 p-4 sm:grid-cols-[190px_minmax(0,1fr)] sm:gap-4">
