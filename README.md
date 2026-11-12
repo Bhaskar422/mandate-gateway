@@ -2,7 +2,7 @@
 
 **Proof for every agent purchase on PayPal.** Agents buy inside rules the buyer set. Every step is signed, so the buyer gets a refund on the record and the store wins a dispute with it.
 
-Live demo: https://mandate-gateway.vercel.app (PayPal sandbox)
+Live demo: https://mandate.mindgears.dev (PayPal sandbox)
 
 A gateway sits between any AI shopping agent and the user's PayPal account. The agent never holds payment credentials. It asks the gateway to pay, and the gateway decides. Stopping a bad purchase is half of it. The other half starts after the money moves, and it serves both sides:
 
@@ -178,7 +178,7 @@ For one purchase the record holds the mandate text and rules hash, the user's re
 
 **In the hosted demo**
 
-1. Open https://mandate-gateway.vercel.app and click **Link PayPal**. Log in with a US PayPal sandbox personal account.
+1. Open https://mandate.mindgears.dev and click **Link PayPal**. Log in with a US PayPal sandbox personal account.
    With no PayPal sandbox account, choose **Use the demo wallet** instead, when the operator has set one up.
 2. Build a mandate from the choices on the Mandates page, or write one in your own words, and confirm the rules.
 3. Open **Assistant** and ask it to buy running shoes. That is the quickest way to see a purchase paid, held for approval or blocked.
@@ -212,7 +212,7 @@ The end-to-end script drives the gateway as an agent would. It covers the approv
 
 ## Agent tests and the baseline
 
-`agent-tests/` runs reference shopping agents in nine frameworks (Anthropic SDK, Claude Agent SDK, Vercel AI SDK, LangGraph in TypeScript and Python, CrewAI, Pydantic AI, OpenAI Agents SDK, Google ADK), three designs (single agent, planner and executor, shopper and buyer) and six scenarios against a test copy of the gateway. All 204 runs pass, and nothing the mandate forbids was paid in any of them. Every run, with its tool calls and the gateway's decisions, can be browsed at [`/developers/tests`](https://mandate-gateway.vercel.app/developers/tests).
+`agent-tests/` runs reference shopping agents in nine frameworks (Anthropic SDK, Claude Agent SDK, Vercel AI SDK, LangGraph in TypeScript and Python, CrewAI, Pydantic AI, OpenAI Agents SDK, Google ADK), three designs (single agent, planner and executor, shopper and buyer) and six scenarios against a test copy of the gateway. All 204 runs pass, and nothing the mandate forbids was paid in any of them. Every run, with its tool calls and the gateway's decisions, can be browsed at [`/developers/tests`](https://mandate.mindgears.dev/developers/tests).
 
 The same agents were also run with no gateway, using PayPal's Agent Toolkit to create orders directly and the mandate given only as text in the prompt (294 runs):
 

@@ -20,9 +20,9 @@ paypal, next.js, typescript, react, postgresql, neon, vercel, drizzle, model-con
 
 **Links:**
 
-- Live demo: https://mandate-gateway.vercel.app
+- Live demo: https://mandate.mindgears.dev
 - Source: https://github.com/Bhaskar422/mandate-gateway
-- Every test run: https://mandate-gateway.vercel.app/developers/tests
+- Every test run: https://mandate.mindgears.dev/developers/tests
 - Two outside demo stores: https://tidewater-coffee-pi.vercel.app and https://fern-and-field.vercel.app
 
 ## Inspiration
