@@ -168,6 +168,20 @@ The tool is offered to the assistant only when `CHANNEL3_API_KEY` is set. The co
 - **Customer Disputes v1** (list, show, `provide-evidence`, `accept-claim`, `send-message`, and the sandbox-only `adjudicate`): the merchant's agent answers disputes.
 - **Webhooks** (`PAYMENT.CAPTURE.*`, `CUSTOMER.DISPUTE.*`) with signature verification through `/v1/notifications/verify-webhook-signature`.
 
+## AI used
+
+- **Claude, through the Anthropic API** ([`src/lib/llm.ts`](src/lib/llm.ts)), does three jobs in the gateway:
+  - drafts the rules from the mandate the buyer wrote in plain English;
+  - answers one narrow question per purchase: is this product in an allowed category?
+  - reads a buyer's problem report and names what went wrong.
+- **The built-in shopping assistant** ([`src/lib/assistant.ts`](src/lib/assistant.ts)) is a Claude tool loop. It is an ordinary agent: it buys only through the same functions the MCP server and REST API call.
+- **A model can only narrow what is allowed.** Code checks the drafted rules against the buyer's own words, and limits, payees, stores and expiry are enforced by a deterministic policy engine. A prompt injection can change what an agent asks for; it cannot raise a limit or change who is paid.
+- **The Model Context Protocol** is how outside agents (ChatGPT, Claude, Cursor, your own code) reach the gateway, with a REST API beside it.
+- **The agent tests** run agents in nine frameworks on Claude, OpenAI and Gemini models (see "Agent tests and the baseline").
+- **Channel3's product search** lets the assistant find products at stores that have not joined (see "Channel3" above).
+
+The model is set with `LLM_MODEL`, and `ASSISTANT_MODEL` for the assistant; both default to `claude-opus-5-5`.
+
 ## The evidence ledger
 
 Each entry stores its type, payload and timestamp, the previous entry's hash, its own SHA-256 hash, and an Ed25519 signature over that hash. Editing, removing or reordering any row breaks verification, and the dashboard has a button that re-checks the whole chain.
