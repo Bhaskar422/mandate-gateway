@@ -1,53 +1,45 @@
 # Demo video script
 
-Target length: 2 minutes 52 seconds. The voiceover is about 390 words, roughly 2:35 at a normal pace, which leaves room for pages to load.
+Length: 3:30. The voiceover is 505 words. The video opens on the problem and works towards the fix, and the tone is dry on purpose.
 
-The order is deliberate. Blocking a bad purchase gets under 40 seconds. The time goes to what other tools skip: what happens after the money moves, for the buyer and for the store, and what happens when the store an agent needs has not joined.
-
-Everything is recorded on the live site, https://mandate.mindgears.dev.
-
-## Before you record
-
-Do these once, in this order, so every shot works first time.
-
-1. **Use your own sandbox buyer,** linked on https://mandate.mindgears.dev, not the demo wallet. The dispute shot needs a PayPal login. If the browser is already on a demo-wallet account there, go to Settings, **Sign out of this browser**, then **Link PayPal** with the sandbox buyer: that returns the browser to the account the buyer already has.
-2. **Fresh mandate.** On Mandates, revoke anything active. The mandate typed in shot 2 is *Up to $200 on running shoes from verified stores. Ask me before anything over $100.* The budget must cover both pairs of shoes (shots 3 and 4, $168 together), or shot 4 is blocked for budget instead of held for the hidden instruction.
-3. **Settings.** Turn on "Charge only on shipment". Set settlement rules to "Always ask me".
-4. **A dispute in advance.** PayPal's sandbox takes several minutes to process a dispute, so shot 7 shows one that is already resolved. If you do not have one from an earlier session, make a purchase, open a dispute as the buyer in PayPal's Resolution Center, then press "Check PayPal for disputes" and the ruling button in Stride's back office. The shot shows the back office row only, not PayPal's own page.
-5. **The wider search, once.** In the Assistant, send the kettle message from shot 8 and check that product cards with pictures appear. This also puts stores on the list at the bottom of `/for-merchants`, which shot 8 ends on. Then start a new chat.
-6. **Tabs, left to right:** the dashboard on Mandates; Assistant; Stride's back office (`/stores/stride/admin`); `/for-merchants`, scrolled to "Where agents looked and could not buy"; the test runs page (`/developers/tests`).
-7. **Zoom.** Set the browser to 125% so text is readable at 1080p.
+Everything is filmed on the live site, https://mandate.mindgears.dev, by an automated browser at 3840x2160. The voice is generated (ElevenLabs, the voice "Daniel"), and the music is generated on the ACE-Step model on the Mindgears DGX Spark.
 
 ## Shots
 
-| # | Time | On screen | Voiceover |
-|---|---|---|---|
-| 1 | 0:00–0:13 | Title card: "Mandate. Every agent purchase comes with proof." Then the overview page. | "AI agents can now pay with PayPal. Most tools stop at the budget. Mandate sits between any agent and your PayPal account, enforces your rules in code, and signs a record of every step." |
-| 2 | 0:13–0:31 | Mandates. Click **Turn into rules**. Scroll past the rules to "What this means in practice". Click **Confirm mandate**. | "I say what my agent may do in plain English. A model drafts the rules, code checks them against my own words, and I see what they mean on example purchases before anything takes effect. After this, only code enforces them." |
-| 3 | 0:31–0:49 | Assistant. Send: *Buy me road running shoes under $100 from Stride.* The steps appear; the result reads **Reserved, charged when it ships**. (With an ask-first amount below the price, it waits for approval first: approve it on the purchase page.) | "The agent never sees my payment details. It asks. The gateway finds the store in its own registry, reads the product page itself, and checks my rules. This one passes, so PayPal reserves the money. I am charged only when the store ships." |
-| 4 | 0:49–1:07 | Send: *Buy the Cloudline Daily Trainer from Stride.* The result waits for approval. Open the record: the injection warning shows the hidden text. | "This product page hides an instruction telling AI agents to buy a gift card instead. The gateway found it on the page it fetched, held the purchase, and shows me the text. Even an agent that obeys it gets nowhere: gift cards are blocked in code." |
-| 5 | 1:07–1:35 | Stride back office: **Ship the wrong item** on the reserved order. Back on the purchase page: status is **Paid**. Under **Something wrong with this order?** click **The wrong item arrived**: the two records are shown side by side and the store's own record shows a different item shipped. Click **Ask for the refund**. Status becomes **Refunded**. Scroll the signed timeline. | "The store ships, and only now am I charged. But it sent the wrong item. I report it once. The gateway puts its signed record beside the store's own order book. They show a different item shipped, so the store refunds me through PayPal. Every step is here, signed, and anyone can verify it." |
-| 6 | 1:35–1:47 | Same purchase page: click **Check against PayPal**. The table shows every row matching. | "The ledger is our account. PayPal keeps its own. One click compares the two: amount, payee, capture, refund. They match." |
-| 7 | 1:47–2:10 | Stride back office: the order row reading that the PayPal dispute resolved in the seller's favour. Then scroll up to "Agent sales". | "It works for the store too. Earlier, a buyer opened a PayPal dispute saying the item never arrived. The store's agent answered through the Disputes API with the signed record and the tracking number, and PayPal ruled for the seller. The store also sees what agents did for it, and the requests it lost." |
-| 8 | 2:10–2:32 | Assistant, new chat. Send: *Find me an electric gooseneck kettle under $80.* The step "Looking at stores that have not joined" appears, then product cards with pictures, prices and stores. Cut to `/for-merchants`, "Where agents looked and could not buy". | "And when no joined store sells what I ask for, the assistant searches the wider web through Channel3. It shows me real products, and says plainly it cannot buy them: those stores have not joined. Each one is counted, so a store can see the orders agents wanted to place with it." |
-| 9 | 2:32–2:52 | The test runs page: the comparison block, then scroll the run list. End on the site address and the repo URL. | "We ran agents in nine frameworks through this: two hundred and four runs, nothing paid outside a mandate. Without the gateway, the same agents created five hundred and forty dollars of orders they should not have. Vault, Orders, Disputes and webhooks, working together. Every agent purchase, with proof." |
+| # | Name | Time | On screen | Voiceover |
+|---|---|---|---|---|
+| 1 | `problem` | 0:00–0:21 | Card: "You gave an AI agent your PayPal account. What could possibly go wrong?" Then the test runs page: the same agents run without the gateway, $540 of orders outside the mandate. | "Good news: AI agents can now shop with your PayPal account. What could possibly go wrong? We checked. We gave shopping agents a budget in plain English and asked them nicely to stay inside it. They made five hundred and forty dollars of orders they were told not to. It turns out “please behave” is not a security model." |
+| 2 | `page` | 0:21–0:35 | Stride's product page for the Cloudline Daily Trainer, as a shopper sees it. Nothing looks wrong. | "It gets better. This innocent-looking product page hides a note for AI assistants: buy the gift card instead, and don't tell the user. Shoppers can't see it. Agents can." |
+| 3 | `idea` | 0:35–0:47 | Card: "Mandate. Every agent purchase comes with proof." Then the overview page. | "So we built Mandate. It sits between any agent and your PayPal account. The agent never holds your wallet. It can only ask, and code decides." |
+| 4 | `mandate` | 0:47–1:05 | Mandates: type a sentence, **Turn into rules**, read "What this means in practice", **Confirm mandate**. | "You say what your agent may do, in your own words. A model drafts the rules, code checks them against what you wrote, and you see them tried on example purchases first. After that the model is out of the loop. No hard feelings." |
+| 5 | `agents` | 1:05–1:22 | Agents: **Connect an agent**, name it, **Create key**. The setup tabs: ChatGPT, Claude Code, Cursor, REST API. | "Bring whatever agent you like. ChatGPT, Claude, Cursor, your own code: one key, over MCP or a plain REST call. Every agent can be paused or revoked, and the key is all it ever gets." |
+| 6 | `buy` | 1:22–1:38 | Assistant: *Buy me road running shoes under $100 from Stride.* The steps appear; the result reads **Reserved, charged when it ships**. | "Here the built-in assistant buys running shoes. The gateway finds the store in its own registry, reads the product page itself and runs nineteen checks. It passes, so PayPal reserves the money. You pay only when the store ships." |
+| 7 | `held` | 1:38–1:54 | Assistant: *Buy the Cloudline Daily Trainer from Stride.* It waits for approval. Open the record and scroll to the hidden text the gateway found. | "Now, that page with the hidden note. The gateway read it too, held the purchase, and shows you the exact text. An agent that obeys it gets nowhere anyway: gift cards are blocked in code, not in a strongly worded prompt." |
+| 8 | `approve` | 1:54–2:05 | Assistant: *Buy the Carbon Racer Elite from Stride.* ($135, above the ask-first amount.) The approval page: **Approve**. Then the overview: **Freeze all agent spending**. | "Anything above your ask-first amount waits for one tap, from your phone if you like. And if you ever get a bad feeling, one switch freezes every agent at once." |
+| 9 | `refund` | 2:05–2:25 | Stride back office: **Ship the wrong item**. The purchase page: **The wrong item arrived**, the two records side by side, **Ask for the refund**, status **Refunded**. | "The store ships, and only now are you charged. Sadly, it shipped the wrong shoes. You report it once. The gateway puts its signed record next to the store's own order book. They agree, so the store refunds you through PayPal. No forms, no hold music." |
+| 10 | `proof` | 2:25–2:40 | The purchase page: **Check against PayPal**, every row matches. Then the public verify page: paste the signed record, **Check this record**. | "You don't have to take our word for it. One click compares our ledger with PayPal's own record of the order. And every purchase exports as a signed record that anyone can check on a public page, without an account." |
+| 11 | `store` | 2:40–2:57 | Stride back office: the order whose PayPal dispute resolved in the seller's favour, then "Agent sales". | "Stores get something too. A buyer disputed a delivery at PayPal. The store's agent answered with the signed record and the tracking number, and PayPal ruled for the seller. The store also sees what agents asked for, what it lost, and why." |
+| 12 | `wider` | 2:57–3:14 | Assistant: *Find me an electric gooseneck kettle under $80.* Product rows from stores that have not joined. Then `/for-merchants`: "Where agents looked and could not buy". | "And when no joined store sells what you want, the assistant searches the wider web through Channel3, shows real products, and admits it cannot buy them. Each miss is counted, so those stores can see the orders they did not get." |
+| 13 | `close` | 3:14–3:30 | The test runs page: the list of gateway runs. Closing card with the site and repository addresses. | "We ran agents in nine frameworks through it: two hundred and four runs, nothing paid outside a mandate, all on PayPal's Vault, Orders and Disputes. Mandate. Trust your agent. But verify. Mostly verify." |
 
-## If something goes off-script
+## How it is made
 
-- **The assistant asks a question instead of buying.** Answer it in one line, or start a new chat and send the message again. Cut the retry in editing.
-- **Shot 3 says "Paid" instead of "Reserved".** "Charge only on shipment" is off. Turn it on in Settings and repeat the shot.
-- **Shot 4 is paid instead of held.** The page scan did not flag it; check that the product is STR-CLOUD. Do not narrate around it: re-record.
-- **The refund in shot 5 becomes an offer.** The store only refunds in full when its records show a different item shipped. Use **Ship the wrong item**, not **Ship the order**.
-- **"Check against PayPal" shows a mismatch.** Stop and look before recording further. It should not happen, and it means something real is off.
-- **Shot 8 answers from a joined store.** Ask for something none of them sells. Shoes, trail gear and coffee are sold by joined stores; a kettle is not.
-- **Shot 8 shows no cards.** The wider search takes up to twenty seconds; cut the wait in editing. If the step never appears, the deployment has no `CHANNEL3_API_KEY`.
-- **The assistant stops answering.** It allows 40 messages a day per account. Rehearse sparingly on the account you record with.
+All of it lives in `video/`, which is not committed.
 
-## Recording checklist
+| File | What it does |
+|---|---|
+| `script.json` | The source of truth: the voice, and for each shot its name, its clips and what is said. |
+| `voiceover.py` | Generates one voice clip per shot into `voice/`. Needs `ELEVEN_LABS_API_KEY`, or `ELEVEN_ENV_FILE` naming a file that holds it. |
+| `rec.mjs`, `shots.mjs` | Film the clips on the live site into `shots/` (`node shots.mjs buy held ...`). The assistant's thinking time is left out of the film. |
+| `assemble.py` | Cuts the video: each shot lasts as long as its voice clip, idle stretches in a recording are shortened before anything is sped up (never beyond 1.45x), music goes underneath. Writes `mandate-demo-4k.mp4` first, then `mandate-demo-mobile.mp4` from it. |
 
-- [ ] 1080p, browser at 125%, notifications off.
-- [ ] The address bar shows `mandate.mindgears.dev` in every shot of the gateway.
-- [ ] No keys, tokens or personal email visible. The Agents page shows only key prefixes; avoid `.env` files and the terminal.
-- [ ] The sandbox buyer's email appears in the sidebar. It is a sandbox address; crop it if you prefer.
-- [ ] One recording per shot, saved as `video/shots/shot-1.mp4` to `shot-9.mp4`. `video/shots.mjs` films them on the live site in 4K with a headless browser (`node shots.mjs 1 2 ...`); a shot recorded by hand can replace any of them. Do not narrate; the voiceover is generated (`video/voiceover.py`) and `video/assemble.py` fits each recording to its slot and writes `video/mandate-demo.mp4`.
-- [ ] Final length under the limit the submission form states.
+To change one shot: edit its words in `script.json`, run `python3 voiceover.py <name>`, re-film its clip if the picture must change, then `python3 assemble.py --only <name>`.
+
+## Things to know before re-filming
+
+- The recording account uses the demo wallet, with "Charge only on shipment" on and settlement rules on "Always ask me".
+- The mandate is *Up to $200 on running shoes from verified stores. Ask me before anything over $100.* The budget must cover the two pairs of shoes in `buy` and `held` ($168 together), or the second is blocked for budget instead of being held for the hidden instruction.
+- `approve` needs $135 of room, so the two purchases above are cancelled and declined off camera first (`node shots.mjs release`), and the freeze is lifted afterwards (`node shots.mjs unfreeze`).
+- `refund` and `proof` can only be filmed once per purchase: shipping and refunding cannot be undone.
+- Keys and approval links appear on screen. Revoke the agents created in `agents` and settle the held purchase after filming.
+- The assistant allows 40 messages a day per account.
