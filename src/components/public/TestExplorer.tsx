@@ -21,6 +21,9 @@ const INJECTION: Record<NonNullable<AgentRun["injection"]>, { label: string; ton
 const words = (s: string) => s.replace(/[_-]+/g, " ");
 const secs = (ms?: number) => (ms == null ? "–" : `${(ms / 1000).toFixed(1)} s`);
 const uniq = (xs: string[]) => [...new Set(xs)];
+const runKey = (r: AgentRun) => r.id ?? `${r.framework}|${r.architecture}|${r.model}|${r.scenario}`;
+/** The address of one run's row on the page: what a cell of the table links to. */
+const runAnchor = (r: AgentRun) => `run-${runKey(r).toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
 
 function Select({ label, value, onChange, options, format = words }: { label: string; value: string; onChange: (v: string) => void; options: string[]; format?: (s: string) => string }) {
   const id = useId();
@@ -129,6 +132,47 @@ const CHEVRON = <ChevronRight size={16} aria-hidden className="mt-0.5 shrink-0 t
 /** Rows rendered before "show more". The gateway list shows every run at once; the longer baseline list is paged. */
 const PAGE = 400, BASELINE_PAGE = 100;
 
+/**
+ * All the gateway runs on one screen: a row for each agent (framework, architecture, model), a column for each
+ * scenario. Each result is a link to that run's stored record further down the page.
+ */
+export function RunMatrix({ runs, scenarioOrder }: { runs: AgentRun[]; scenarioOrder: string[] }) {
+  const scenarios = scenarioOrder.filter((s) => runs.some((r) => r.scenario === s));
+  const agents = uniq(runs.map((r) => `${r.framework}|${r.architecture}|${r.model}`));
+  const at = new Map(runs.map((r) => [`${r.framework}|${r.architecture}|${r.model}|${r.scenario}`, r]));
+  const TONE: Record<AgentRun["status"], string> = { pass: "tone-ok", fail: "tone-bad", error: "tone-bad", skipped: "tone-neutral" };
+  return (
+    <div className="card overflow-x-auto">
+      <table className="w-full min-w-[720px] border-collapse text-sm">
+        <thead>
+          <tr className="border-b border-line text-left">
+            <th scope="col" className="px-3 py-2.5 font-medium text-ink-3 sm:px-4">Agent</th>
+            {scenarios.map((s) => <th key={s} scope="col" className="px-2 py-2.5 text-center font-medium text-ink-3">{words(s)}</th>)}
+          </tr>
+        </thead>
+        <tbody>
+          {agents.map((a) => { const [framework, architecture, model] = a.split("|"); return (
+            <tr key={a} className="border-b border-line last:border-b-0">
+              <th scope="row" className="px-3 py-2 text-left font-normal sm:px-4">
+                <span className="font-semibold text-ink">{framework}</span>
+                <span className="block text-xs text-ink-3">{words(architecture)} · {model}</span>
+              </th>
+              {scenarios.map((s) => { const r = at.get(`${a}|${s}`); if (!r) return <td key={s} className="px-2 py-2 text-center text-ink-3">–</td>; const st = STATUS[r.status]; return (
+                <td key={s} className="px-2 py-2 text-center">
+                  <a href={`#${runAnchor(r)}`} className={`${TONE[r.status]} tone-text inline-flex items-center gap-1 rounded-full bg-[var(--t-soft)] px-2 py-0.5 font-medium underline-offset-2 hover:underline`}
+                    aria-label={`${st.label}: ${words(s)}, ${framework}, ${words(architecture)}, ${model}. Open the stored run.`}>
+                    {st.icon}{st.label}{r.injection === "followed" && <ShieldAlert size={12} aria-label="followed the hidden instruction" />}
+                  </a>
+                </td>
+              ); })}
+            </tr>
+          ); })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 /** Every gateway run, with filters, a search box and counts that follow them. */
 export function GatewayRuns({ runs, scenarioOrder }: { runs: AgentRun[]; scenarioOrder: string[] }) {
   const [f, setF] = useState({ framework: "", architecture: "", model: "", scenario: "", status: "", injection: "" });
@@ -136,6 +180,29 @@ export function GatewayRuns({ runs, scenarioOrder }: { runs: AgentRun[]; scenari
   const [shown, setShown] = useState(PAGE);
   const { details, failed, load, list } = useDetails();
   const set = (k: keyof typeof f) => (v: string) => { setF((x) => ({ ...x, [k]: v })); setShown(PAGE); };
+
+  // A link from the table above names one run: show every row, then open that run and bring it into view.
+  const [wanted, setWanted] = useState("");
+  useEffect(() => {
+    const read = () => {
+      const id = decodeURIComponent(location.hash.slice(1));
+      if (!id.startsWith("run-")) return;
+      setF({ framework: "", architecture: "", model: "", scenario: "", status: "", injection: "" }); setQ(""); setShown(Infinity);
+      setWanted(`${id}@${Date.now()}`);
+    };
+    read();
+    addEventListener("hashchange", read);
+    return () => removeEventListener("hashchange", read);
+  }, []);
+  useEffect(() => {
+    if (!wanted) return;
+    const row = document.getElementById(wanted.split("@")[0]);
+    if (!(row instanceof HTMLDetailsElement)) return;
+    row.open = true;
+    load();
+    row.scrollIntoView({ block: "start", behavior: "smooth" });
+    row.querySelector("summary")?.focus({ preventScroll: true });
+  }, [wanted, load]);
 
   // Default order: failures and errors first, then runs where the agent followed the hidden instruction, then the suite's own order.
   const ordered = useMemo(() => {
@@ -178,9 +245,9 @@ export function GatewayRuns({ runs, scenarioOrder }: { runs: AgentRun[]; scenari
       {filtered.length === 0 ? <p className="card mt-3 p-4 text-sm text-ink-2">No run matches these filters.</p> : (
         <div className="card mt-3 overflow-hidden">
           {filtered.slice(0, shown).map((r) => {
-            const st = STATUS[r.status], inj = r.injection ? INJECTION[r.injection] : null, id = r.id ?? `${r.framework}|${r.architecture}|${r.model}|${r.scenario}`;
+            const st = STATUS[r.status], inj = r.injection ? INJECTION[r.injection] : null, id = runKey(r);
             return (
-              <details key={id} className={ROW} onToggle={(e) => { if (e.currentTarget.open) load(); }}>
+              <details key={id} id={runAnchor(r)} className={`${ROW} scroll-mt-4`} onToggle={(e) => { if (e.currentTarget.open) load(); }}>
                 <summary className={SUMMARY}>
                   {CHEVRON}
                   <span className="min-w-0 flex-1">

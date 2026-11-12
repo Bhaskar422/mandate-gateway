@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import BaselineComparison from "@/components/public/BaselineComparison";
-import { BaselineRuns, GatewayRuns } from "@/components/public/TestExplorer";
+import { BaselineRuns, GatewayRuns, RunMatrix } from "@/components/public/TestExplorer";
 import PublicShell from "@/components/shell/PublicShell";
 import LocalTime from "@/components/LocalTime";
 import { agentBaseline, baselineRuns } from "@/data/agent-baseline";
@@ -19,7 +19,7 @@ export default function AgentTestsPage() {
   const { runs } = agentResults;
   const order = scenarios.map((s) => s.name);
   const frameworks = new Set(runs.map((r) => r.framework)).size, architectures = new Set(runs.map((r) => r.architecture)).size, models = [...new Set(runs.map((r) => r.model))];
-  const toc = [["baseline", "With and without the gateway"], ["scenarios", "The scenarios"], ["runs", "Gateway runs"], ["baseline-runs", "Baseline runs"]];
+  const toc = [["results", "All the results"], ["baseline", "With and without the gateway"], ["scenarios", "The scenarios"], ["runs", "Gateway runs"], ["baseline-runs", "Baseline runs"]];
   return (
     <PublicShell width="max-w-[1040px]">
       <header className="mb-8 max-w-3xl">
@@ -33,6 +33,12 @@ export default function AgentTestsPage() {
       </header>
 
       <div className="space-y-12">
+        <section aria-labelledby="results" className="space-y-4">
+          <H2 id="results">All {runs.length} results</H2>
+          <p className="max-w-3xl text-base text-ink-2">One row for each agent, one column for each scenario. Click a result to open that run&apos;s stored record: its tool calls, the gateway&apos;s purchase records and the agent&apos;s final message.</p>
+          <RunMatrix runs={runs} scenarioOrder={order} />
+        </section>
+
         <section aria-labelledby="baseline" className="space-y-4">
           <H2 id="baseline">With and without the gateway</H2>
           <BaselineComparison baseline={agentBaseline} />
