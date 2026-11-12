@@ -1,6 +1,6 @@
 # Demo video script
 
-Length: 2:58, under the three-minute limit. The voiceover is 512 words. The video opens on the problem and works towards the fix, and the tone is dry on purpose. There is no music: voice only.
+Length: 2:59 exactly, at the three-minute limit. The voiceover is 512 words. The video opens on the problem and works towards the fix, and the tone is dry on purpose. There is no music: voice only.
 
 Everything is filmed on the live site, https://mandate.mindgears.dev, by an automated browser at 3840x2160 and 60 frames a second. The voice is generated (ElevenLabs, the voice "George").
 
@@ -21,7 +21,7 @@ Everything is filmed on the live site, https://mandate.mindgears.dev, by an auto
 | 11 | `dispute` | 2:05–2:23 | Stride back office: **Check PayPal for disputes**, PayPal returns two. The order whose dispute resolved in the seller's favour, with its tracking number and the agent's note. Then the one the agent conceded and refunded. | "Stores gain too. A buyer disputed a delivery at PayPal. The store's agent answered through the Disputes API with the signed record and the tracking number, and PayPal ruled for the seller. When the store was in the wrong, the same agent conceded and refunded. Honesty, automated." |
 | 12 | `store` | 2:23–2:36 | The merchant page, then the one file Tidewater Coffee publishes on its own site (PayPal account, catalogue address) and the catalogue it points to. Then Stride's "Agent sales". | "Joining takes a store one small file on its own site, naming its PayPal account and its catalogue, so the gateway can search its products directly. In return, the store sees what agents asked for, and what it lost." |
 | 13 | `wider` | 2:36–2:47 | Assistant: *Find me an electric gooseneck kettle under $80.* Product rows from stores that have not joined. Then `/for-merchants`: "Where agents looked and could not buy". | "When no joined store has it, the assistant searches the wider web through Channel3, and admits it cannot buy there. Each miss is counted, so those stores see the orders they did not get." |
-| 14 | `close` | 2:47–2:58 | The test runs page: the table of all 204 results; one result is clicked and its stored run opens. Closing card with the site and repository addresses. | "Nine agent frameworks, two hundred and four runs, every result on record, nothing paid outside a mandate. Mandate. Trust your agent. But verify. Mostly verify." |
+| 14 | `close` | 2:47–2:59 | The test runs page: the table of all 204 results; one result is clicked and its stored run opens. Closing card with the site and repository addresses. | "Nine agent frameworks, two hundred and four runs, every result on record, nothing paid outside a mandate. Mandate. Trust your agent. But verify. Mostly verify." |
 
 ## How it is made
 
