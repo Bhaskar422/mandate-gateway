@@ -56,20 +56,22 @@ function Linked({ text }: { text: string }) {
 function FoundProducts({ products }: { products: FoundProduct[] }) {
   return (
     <div className="mt-1 basis-full border-t border-line pt-2.5">
-      <ul className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
+      <ul className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
         {products.map((p) => (
           <li key={p.link} className="min-w-0">
-            <a href={p.link} target="_blank" rel="noreferrer noopener" className="flex h-full flex-col overflow-hidden rounded-lg border border-line transition-colors hover:border-line-strong">
-              <span className="flex aspect-square items-center justify-center bg-white">
+            <a href={p.link} target="_blank" rel="noreferrer noopener" className="flex h-full items-center gap-3 rounded-lg border border-line p-2 transition-colors hover:border-line-strong hover:bg-sunken">
+              <span className="flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-md bg-white">
                 {p.image
                   // eslint-disable-next-line @next/next/no-img-element
-                  ? <img src={p.image} alt="" loading="lazy" referrerPolicy="no-referrer" className="size-full object-contain p-2" onError={(e) => { e.currentTarget.style.visibility = "hidden"; }} />
-                  : <span className="px-2 text-center text-xs text-neutral-500">No picture</span>}
+                  ? <img src={p.image} alt="" width={56} height={56} loading="lazy" referrerPolicy="no-referrer" className="size-full object-contain" onError={(e) => { e.currentTarget.style.visibility = "hidden"; }} />
+                  : <span className="text-[10px] text-neutral-500">No picture</span>}
               </span>
-              <span className="flex flex-1 flex-col gap-0.5 border-t border-line px-2.5 py-2">
-                <span className="line-clamp-2 text-sm font-medium text-ink [overflow-wrap:anywhere]">{p.title}</span>
-                {p.price && <span className="num text-sm text-ink-2">{p.currency && p.currency !== "USD" ? `${p.price} ${p.currency}` : `$${p.price}`}</span>}
-                <span className="code mt-auto pt-1 text-xs text-ink-3 [overflow-wrap:anywhere]">{p.store}<span className="sr-only"> (opens in a new tab)</span></span>
+              <span className="min-w-0 flex-1">
+                <span className="line-clamp-2 text-sm font-medium leading-snug text-ink [overflow-wrap:anywhere]">{p.title}</span>
+                <span className="mt-0.5 flex flex-wrap items-baseline gap-x-2 text-xs text-ink-3">
+                  {p.price && <span className="num text-sm text-ink-2">{p.currency && p.currency !== "USD" ? `${p.price} ${p.currency}` : `$${p.price}`}</span>}
+                  <span className="code [overflow-wrap:anywhere]">{p.store}<span className="sr-only"> (opens in a new tab)</span></span>
+                </span>
               </span>
             </a>
           </li>
