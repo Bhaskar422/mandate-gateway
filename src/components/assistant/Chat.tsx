@@ -36,6 +36,22 @@ function StepDecision({ purchaseId, live }: { purchaseId: string; live: boolean 
   return <DecisionReveal checks={p.checks} outcome={p.outcome} status={p.status} reason={p.reason} autoPlay={live} collapseAfter replayLabel="Replay" />;
 }
 
+/**
+ * The assistant's words, with any web address in them made into a link. The link's text is the address itself, so
+ * what is clicked is what is shown: a reply can be shaped by a store's page, and must not hide where a link goes.
+ */
+function Linked({ text }: { text: string }) {
+  const parts = text.split(/(https?:\/\/[^\s<>"']+)/g);
+  return <>{parts.map((part, i) => {
+    if (i % 2 === 0) return part;
+    const url = part.replace(/[.,;:!?)\]]+$/, ""), rest = part.slice(url.length);
+    let ok = false;
+    try { ok = /^https?:$/.test(new URL(url).protocol); } catch { /* not an address after all */ }
+    if (!ok) return part;
+    return <span key={i}><a href={url} target="_blank" rel="noreferrer noopener" className="link [overflow-wrap:anywhere]">{url.length > 64 ? `${url.slice(0, 61)}…` : url}</a>{rest}</span>;
+  })}</>;
+}
+
 /** Products found at stores that have not joined: a picture, the price and a link out. None of them can be bought here. */
 function FoundProducts({ products }: { products: FoundProduct[] }) {
   return (
@@ -199,7 +215,7 @@ export default function Chat() {
               <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-full bg-brand-soft text-brand-ink"><Sparkles size={15} aria-hidden /></span>
               <div className="min-w-0 flex-1 space-y-3">
                 {m.steps.length > 0 && <ul className="space-y-2 rounded-lg border border-line bg-raised px-3.5 py-3">{m.steps.map((s) => <StepRow key={s.id} s={s} decision={decisionSteps.has(s.id)} live={live.current.has(s.id)} />)}</ul>}
-                {m.text && <p className="whitespace-pre-wrap text-base text-ink [overflow-wrap:anywhere]">{m.text.trim()}</p>}
+                {m.text && <p className="whitespace-pre-wrap text-base text-ink [overflow-wrap:anywhere]"><Linked text={m.text.trim()} /></p>}
                 {!m.text && !m.steps.length && !m.error && <p className="flex items-center gap-2 text-sm text-ink-3"><LoaderCircle size={14} className="spin" aria-hidden />Thinking</p>}
                 {m.error && <p role="alert" className="tone-bad tone-text text-sm font-medium">{m.error}</p>}
               </div>
